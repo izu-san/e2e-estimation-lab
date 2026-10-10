@@ -145,6 +145,18 @@ def validate_normalize(rd: Path) -> list[dict]:
         if len(cids) > 1 and not all(c["relation"] == "split" for c in cases if c["case_id"] in cids):
             errs.append(E("BAD_RELATION", f"source_items({sid})",
                           f"複数ケース {cids} に対応しますが relation が split ではありません"))
+    # 1項目だけから分解したケースの手順数が親項目と合わない場合は警告（数え方の不整合を見つける）
+    for sid, cids in used.items():
+        it = item_by_id.get(sid)
+        if it is None or it["step_count"] is None:
+            continue
+        kids = [c for c in cases if c["case_id"] in cids and c["source_item_ids"] == [sid]]
+        if len(kids) > 1 and len(kids) == len(cids):
+            total = sum(c["step_count"] for c in kids)
+            if total != it["step_count"]:
+                errs.append(E("STEP_COUNT_MISMATCH", f"source_items({sid})",
+                              f"分解先 {cids} の step_count 合計 {total} が親項目の step_count {it['step_count']} と一致しません。"
+                              "数え方（→区切り等）を親子で揃えるか、差の理由を relation_reason に書いてください", "warning"))
     # parsedの領域にテスト項目が1件も無い場合は警告
     regions_with_items = {rid for it in items for rid in it["region_ids"]}
     for r in data["regions"]:
@@ -334,6 +346,9 @@ def validate_assessments(rd: Path) -> list[dict]:
         for q in a.get("question_ids", []):
             if q not in q_ids:
                 errs.append(E("UNKNOWN_QUESTION", p, f"question_id {q} が questions.json にありません"))
+    errs += _usage_consistency(data, design)
+    errs += _question_links(data, design, norm, rd)
+    errs += _bare_evidence_refs(data)
     for cid in sorted(case_ids):
         for arch in sorted(arch_ids):
             if (cid, arch) not in seen:
@@ -370,6 +385,69 @@ def validate_assessments(rd: Path) -> list[dict]:
         if c["implementation_kind"] in ("新規", "改修") and c["cost_owner"] == cid and cid not in seen_c:
             errs.append(E("UNASSESSED", "common_assessments", f"{cid} の難易度判定がありません（未算定になります）",
                           "warning"))
+    return errs
+
+
+def _usage_consistency(data: dict, design: dict) -> list[dict]:
+    """common_design の used_by と assessments の uses_components が食い違わないこと（対象外の部品は除く）。"""
+    errs: list[dict] = []
+    expected: dict[tuple[str, str], set[str]] = {}
+    for c in design["components"]:
+        if c["implementation_kind"] == "対象外":
+            continue
+        for arch in c["arch_ids"]:
+            for u in c["used_by"]:
+                expected.setdefault((u, arch), set()).add(c["component_id"])
+    for n, a in enumerate(data["case_assessments"]):
+        for arch in a["arch_ids"]:
+            want = expected.get((a["case_id"], arch), set())
+            got = set(a.get("uses_components", []))
+            if want != got:
+                errs.append(E("USAGE_MISMATCH", f"case_assessments/{n}({a['case_id']})",
+                              f"構成案 {arch}: common_design の used_by と uses_components が一致しません"
+                              f"（used_byのみ: {sorted(want - got)}、uses_componentsのみ: {sorted(got - want)}）。"
+                              "どちらかを直して揃えてください"))
+    return errs
+
+
+def _question_links(data: dict, design: dict, norm: dict, rd: Path) -> list[dict]:
+    """未解決の質問・仮定のtargetsと、各ケース/共通作業の question_ids が双方向でそろっていること（警告）。"""
+    qs, _ = _load(rd, "ai/questions.json")
+    if not qs:
+        return []
+    errs: list[dict] = []
+    open_q = {q["question_id"]: q for q in qs["items"] if q["status"] != "resolved"}
+    linked: dict[str, set[str]] = {}
+    for a in data["case_assessments"]:
+        linked.setdefault(a["case_id"], set()).update(a.get("question_ids", []))
+    for ca in data["common_assessments"]:
+        linked.setdefault(ca["component_id"], set()).update(ca.get("question_ids", []))
+    for qid, q in open_q.items():
+        for t in q["targets"]:
+            if t in linked and qid not in linked[t]:
+                errs.append(E("QUESTION_NOT_LINKED", f"{t}",
+                              f"{qid} は targets に {t} を含みますが、{t} の question_ids にありません", "warning"))
+    for tid, qids in linked.items():
+        for qid in qids:
+            q = open_q.get(qid)
+            if q and tid not in q["targets"]:
+                errs.append(E("QUESTION_TARGET_MISSING", f"{tid}",
+                              f"{tid} は {qid} を参照していますが、{qid} の targets に {tid} がありません", "warning"))
+    return errs
+
+
+_BARE_REF = re.compile(r"[（(][A-Z]{1,3}[0-9]+(?::[A-Z]{1,3}[0-9]+)?[）)]")
+
+
+def _bare_evidence_refs(data: dict) -> list[dict]:
+    """evidence のセル座標はシート名つき（例: 確認リスト!C3）にする。シート名なしの座標は警告。"""
+    errs: list[dict] = []
+    for n, a in enumerate(data["case_assessments"]):
+        for ax, v in a["axes"].items():
+            if _BARE_REF.search(v["evidence"]):
+                errs.append(E("EVIDENCE_REF_NO_SHEET", f"case_assessments/{n}({a['case_id']})/axes/{ax}",
+                              "evidence のセル座標にシート名がありません。『シート名!セル』形式で書き、views/*.md で座標を確認してください",
+                              "warning"))
     return errs
 
 

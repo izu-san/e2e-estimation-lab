@@ -24,3 +24,11 @@
 | STANDARDS | 基準の読取り・整合エラー。原本は変更せず、該当セル・影響・暫定扱いを questions(standards_issue) と最終報告に書く |
 
 検証器・スキーマ・基準・設定を変更してエラーを消してはいけない。上限に達したら止める。
+
+## 整合チェック（2026-10 追加）
+| code | 対応 |
+|---|---|
+| USAGE_MISMATCH | `common_design.json` の `used_by` と `assessments.json` の `uses_components` を一致させる。部品を使うケースは両方に書く（RUN・BASEなど全ケースが使う部品も含む）。どちらが正しいかは責務から決める |
+| STEP_COUNT_MISMATCH（警告） | 親項目と分解先ケースの `step_count` の数え方を揃える。意図して違う場合は `relation_reason` に理由を書く |
+| QUESTION_NOT_LINKED / QUESTION_TARGET_MISSING（警告） | 質問の `targets` と、ケース・共通作業の `question_ids` を双方向でそろえる。同じ前提に依存する他のケースの漏れも探す |
+| EVIDENCE_REF_NO_SHEET（警告） | evidence のセル座標は `シート名!セル`（例: `確認リスト!C3`）。`views/*.md` で実際の座標を確認する。列Aが「No.」の場合、手順・期待結果は別の列にある |

@@ -441,7 +441,7 @@ def standards_text(std_part: dict, exclude_sheet_patterns: list[str] | None = No
     omitted = [sh["name"] for sh in wb["sheets"] if sh not in keep]
     head = f"# {wb['file_name']} (sha256={wb['sha256']})\n\n"
     if omitted:
-        head += f"> ダイジェスト: 次のシートは省略（説明用の例・出力仕様）: {', '.join(omitted)}。全文は同名の .md（ダイジェストでない方）を参照。\n\n"
+        head += f"> ダイジェスト: 次のシートは省略（説明用の例・出力仕様）: {', '.join(omitted)}。全文は同名の .md（ダイジェストでない方）を参照。判定例のID（EX-xx）を根拠に書く前に、全文で該当行を必ず確認する。\n\n"
     return head + "\n\n".join(render_sheet(sh) for sh in keep)
 
 

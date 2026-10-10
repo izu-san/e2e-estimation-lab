@@ -35,3 +35,8 @@
 - `対象外`: `exclusion_reason` 必須。案件設定で除外された種別も対象外になる。
 
 不明なCI要件などは `要確認` として残してよい。基準にない作業は作らず、questions に「基準外」として残す。
+
+## used_by と採点の一致
+`used_by` は、採点工程の `uses_components` と同じ集合にする。全ケースが使う部品（BASE・RUN など）も `used_by` に全ケースを並べ、
+各ケースの `uses_components` にも入れる。要確認ケースも、前提にする部品を両方に書く。
+PAGE は `responsibility` に挙げた画面と `elements` を一致させる（挙げた画面が要素に無い、または逆、を作らない）。

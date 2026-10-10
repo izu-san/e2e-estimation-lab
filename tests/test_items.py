@@ -144,7 +144,7 @@ def test_pipeline_with_groups(tmp_path, capsys):
     assert code == 0, out
     d = design()
     for comp in d["components"]:
-        comp["used_by"] = ["C1"]
+        comp["used_by"] = ["C1", "C2", "C3", "C4"]
     write_json(rd / "ai/common_design.json", d)
     a = assessments()
     a["case_assessments"] = [dict(a["case_assessments"][0], case_id=f"C{v}") for v in range(1, 5)]

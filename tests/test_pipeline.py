@@ -73,10 +73,10 @@ def assessments():
             "case_assessments": [
                 {"case_id": "C-001", "arch_ids": ["A1"], "scope": "対象内", "scope_reason": "", "feasibility": "feasible",
                  "info_sufficient": True, "axes": ax(2, 1, 1, 1, 1), "estimate_status": "確定可能", "rationale": "r",
-                 "uses_components": ["PAGE-1"]},
+                 "uses_components": ["BASE-1", "PAGE-1"]},
                 {"case_id": "C-002", "arch_ids": ["A1"], "scope": "対象内", "scope_reason": "", "feasibility": "feasible",
                  "info_sufficient": False, "axes": ax(1, 1, None, 1, 1), "estimate_status": "要確認",
-                 "rationale": "ログイン手段不明", "question_ids": ["Q1"]},
+                 "rationale": "ログイン手段不明", "question_ids": ["Q1"], "uses_components": ["BASE-1"]},
             ],
             "common_assessments": [
                 {"component_id": "BASE-1", "difficulty": "Low", "matched_conditions": "m", "rationale": "r",
@@ -316,3 +316,43 @@ def test_missing_input_recorded(tmp_path, capsys):
     assert code == 2 and out["missing_inputs"]
     code, out = run_cli(capsys, "extract", "--run", "x")
     assert out["constraints"][0]["code"] == "NOT_FOUND"
+
+
+def _stage(capsys, stage):
+    code, out = run_cli(capsys, "validate-stage", "--run", "t1", "--stage", stage)
+    return code, {e["code"] for e in out["errors"]}, {w["code"] for w in out.get("warnings", [])}
+
+
+def test_usage_mismatch_between_design_and_assessment(run, capsys):
+    """common_design の used_by と assessments の uses_components が食い違うとエラー。"""
+    rd, _ = run
+    a = assessments()
+    a["case_assessments"][0]["uses_components"] = ["PAGE-1"]  # BASE-1 を書き漏らす
+    write_json(rd / "ai/assessments.json", a)
+    code, errors, _ = _stage(capsys, "assessments")
+    assert code == 1 and "USAGE_MISMATCH" in errors
+
+
+def test_question_links_and_bare_evidence_ref_warn(run, capsys):
+    """質問のtargetsと question_ids の食い違い、シート名なしの座標は警告（エラーにはしない）。"""
+    rd, _ = run
+    a = assessments()
+    a["case_assessments"][1]["question_ids"] = []  # Q1 の targets に C-002 があるのに参照しない
+    a["case_assessments"][0]["axes"]["AX-01"]["evidence"] = "一覧と詳細（C3）"
+    write_json(rd / "ai/assessments.json", a)
+    code, errors, warns = _stage(capsys, "assessments")
+    assert code == 0 and not errors
+    assert {"QUESTION_NOT_LINKED", "EVIDENCE_REF_NO_SHEET"} <= warns
+
+
+def test_step_count_mismatch_between_parent_and_children_warns(run, capsys):
+    rd, _ = run
+    n = normalized()
+    n["source_items"][0]["step_count"] = 5
+    n["cases"] = [dict(n["cases"][0], case_id=f"C-00{i}", relation="split", relation_reason="分解",
+                       step_count=2) for i in (1, 3)] + [n["cases"][1]]
+    for c in n["cases"][:2]:
+        c["source_item_ids"] = ["T-1"]
+    write_json(rd / "ai/normalized_cases.json", n)
+    code, errors, warns = _stage(capsys, "normalize")
+    assert code == 0 and "STEP_COUNT_MISMATCH" in warns
