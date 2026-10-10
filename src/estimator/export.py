@@ -177,15 +177,16 @@ def export(rd: Path) -> dict:
         data.append(["項目", it["item_id"], it["original_id"], "内部付与" if it["id_assigned"] else "原資料",
                      it["title"], _ref_str(it["refs"]), it["step_count"], it["expected_count"],
                      it["data_pattern_count"], it["disposition"], it["duplicate_of"],
-                     cases_by_item.get(it["item_id"]), it["reason"]])
+                     cases_by_item.get(it["item_id"]), it["reason"],
+                     [f"{x['summary']}（{', '.join(x['question_ids'])}）" for x in it.get("pending_parts", [])]])
     disp = {r["region_id"]: r for r in norm["regions"]}
     for r in inv["regions"]:
         d = disp.get(r["region_id"], {})
         data.append(["領域", r["region_id"], None, None, ", ".join(r["first_row_preview"][:4]),
                      f"{r['workbook_id']}:{r['sheet']}!{r['range']}", None, None, None,
-                     f"{d.get('role')}/{d.get('disposition')}" if d else "処遇なし", None, None, d.get("reason")])
+                     f"{d.get('role')}/{d.get('disposition')}" if d else "処遇なし", None, None, d.get("reason"), None])
     _table(ws, ["種別", "ID", "原ID", "ID区分", "タイトル/先頭", "出典", "手順数", "期待結果数", "データパターン数",
-                "処遇", "統合先", "対応ケース", "理由"], data, {5: 40, 6: 30, 13: 40})
+                "処遇", "統合先", "対応ケース", "理由", "保留した未確定部分"], data, {5: 40, 6: 30, 13: 40, 14: 40})
 
     # 確認事項
     ws = wb.create_sheet("確認事項")
@@ -207,6 +208,15 @@ def export(rd: Path) -> dict:
                          asmt.get("rationale"), None, None, None])
     _table(ws, ["構成案", "case_id", "原項目", "分解/統合", "理由", "手順", "期待結果", "5軸", "難易度", "AI理由",
                 "レビュー判定(OK/NG)", "正しい値", "コメント"], data, {3: 30, 6: 40, 7: 40, 10: 40, 13: 40})
+
+    # 意味レビューの指摘と対応
+    findings = review_findings(rd)
+    ws = wb.create_sheet("意味レビュー")
+    _table(ws, ["対象", "関連", "種類", "指摘", "修正案", "対応", "対応内容", "質問"],
+           [[f["target"], f.get("related"), f["kind"], f["message"], f["suggestion"],
+             RESOLUTION_LABELS.get((f.get("resolution") or {}).get("status"), "未記録"),
+             (f.get("resolution") or {}).get("note"), (f.get("resolution") or {}).get("question_ids")]
+            for f in findings], {4: 60, 5: 40, 7: 40})
 
     # 検証結果
     ws = wb.create_sheet("検証結果")
@@ -238,8 +248,29 @@ def export(rd: Path) -> dict:
     ws.column_dimensions["B"].width = 120
 
     atomic_save_workbook(wb, rd / "estimate.xlsx")
-    write_text(rd / "summary.md", render_summary(man, est, val, questions, conds, norm))
+    write_text(rd / "summary.md", render_summary(man, est, val, questions, conds, norm, findings))
     return {"xlsx": str(rd / "estimate.xlsx"), "summary": str(rd / "summary.md")}
+
+
+RESOLUTION_LABELS = {"fixed": "修正済", "question": "質問化", "rejected": "不採用", "deferred": "未対応"}
+
+
+def review_findings(rd: Path) -> list[dict]:
+    p = rd / "ai/semantic_review.json"
+    return read_json(p).get("findings", []) if p.exists() else []
+
+
+def _review_lines(findings: list[dict]) -> list[str]:
+    """意味レビューの指摘と対応。未対応（deferred・未記録）を先に出す。"""
+    if not findings:
+        return []
+    label = lambda f: RESOLUTION_LABELS.get((f.get("resolution") or {}).get("status"), "未記録")  # noqa: E731
+    open_f = [f for f in findings if label(f) in ("未対応", "未記録")]
+    out = [f"## 意味レビューの指摘 ({len(findings)}件、うち未対応{len(open_f)}件)", ""]
+    for f in sorted(findings, key=lambda f: label(f) not in ("未対応", "未記録")):
+        note = (f.get("resolution") or {}).get("note")
+        out.append(f"- [{label(f)}] {f['kind']} {f['target']}: {f['message'][:120]}" + (f" → {note[:80]}" if note else ""))
+    return out + [""]
 
 
 def _fmt(v):
@@ -273,11 +304,16 @@ def _mapping_lines(norm: dict | None) -> list[str]:
         line += f"（分解された原項目: {', '.join(split)}）"
     if merged:
         line += f"（統合されたケース: {', '.join(merged)}）"
-    return [line]
+    pending = [(i["item_id"], x) for i in items for x in i.get("pending_parts", [])]
+    out = [line]
+    if pending:
+        out.append(f"- ケースにせず保留した未確定部分 {len(pending)}件（未解決件数に含む）: "
+                   + "; ".join(f"{iid} {x['summary'][:40]}（{', '.join(x['question_ids'])}）" for iid, x in pending))
+    return out
 
 
 def render_summary(man: dict, est: dict, val: dict, questions: list[dict], conds: list[dict],
-                   norm: dict | None = None) -> str:
+                   norm: dict | None = None, findings: list[dict] | None = None) -> str:
     st = val["status"]
     out = [f"# 見積もり結果 {man['run_id']}", "",
            f"- 入力: {', '.join(i['file_name'] for i in man['inputs'])}",
@@ -302,6 +338,7 @@ def render_summary(man: dict, est: dict, val: dict, questions: list[dict], conds
         detail = "; ".join(c["conditions"] + c["assumptions"]) or "（条件の記載なし）"
         out.append(f"- [{c['kind']}] {c['id']}: {detail}")
     out.append("")
+    out += _review_lines(findings or [])
     open_q = [q for q in questions if q["status"] != "resolved"]
     out += [f"## 確認事項・仮定 ({len(open_q)}件未解決)", ""]
     for q in open_q[:50]:

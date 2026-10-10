@@ -345,6 +345,7 @@ def load_cases_standard(path: Path, spec: dict) -> dict:
         "effort": effort, "thresholds": thresholds, "axes": axes,
         "effort_table_location": f"{hit['sheet']['name']}!R{hit['header_row']}",
         "status_rule": spec.get("status_rule"),
+        "component_overlap": spec.get("component_overlap"),
         "example": example,
         "text_fingerprint": fp, "text_approval": approval,
         "errors": errors, "warnings": warnings + _read_warnings(wb, spec),

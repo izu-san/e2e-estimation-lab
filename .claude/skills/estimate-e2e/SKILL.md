@@ -24,8 +24,14 @@ argument-hint: "<inputs/項目書.xlsx> --config <config/estimate.yaml>  |  --pr
 - 対象サイトへのアクセス・登録・注文はしない。不明点はユーザーに質問せず、成果物に残して進める。
 - 1クリック・1assert・1URLを自動的に1ケースにしない。
 
+## 実行環境（見積もりモード）
+`scripts/start-estimate-session.sh` から起動した見積もりモードでは、権限が次のように絞られている。
+- Bash は `scripts/estimator <サブコマンド> ...` の**単独実行だけ**使える。`&&`・`;`・パイプ・変数代入・`ls`・`cat` は拒否される。
+- ファイルの一覧は Glob、内容は Read、検索は Grep を使う。書けるのは現在の `runs/<run_id>/` だけ。
+- Bash が1回拒否されても「Bash全体が使えない」と判断しない。まず `scripts/estimator status --run <id>` を単独で実行して確かめる。
+
 ## 工程
-CLIは `scripts/estimator <command>`。各コマンドはJSONを出力する。
+CLIは `scripts/estimator <command>`。各コマンドはJSONを出力する。1回の呼出しで1コマンドだけ実行する。
 
 1. **実行開始**: 引数が `--run <id>` なら既存runを使う。そうでなければ
    `scripts/estimator init-run --input <xlsx> --config <yaml>`（または `--project <manifest>`）→ `scripts/estimator extract --run <id>`。
@@ -42,11 +48,15 @@ CLIは `scripts/estimator <command>`。各コマンドはJSONを出力する。
 5. **確認事項・仮定・不可理由の起票** → `ai/questions.json`（0件でも `items: []`）→ `validate-stage --stage questions`
    採点（工程6）が `question_ids` で参照するため先に作る。質問ID（`Q-001` 等）をここで採番する。
    採点中に新しい質問・仮定が出たら `questions.json` に追記して `validate-stage --stage questions` をやり直す。
+   資料情報・前提・未確定事項など説明・参考領域（role が description / reference）の**各行**を、質問の `refs` に入れるか、
+   質問にしない理由を `premise_reviews` に書く（漏れは `PREMISE_ROW_UNTRACED` 警告）。実行環境の未調査事項、受入基準、
+   公開サイトへの書込みの可否は質問・仮定に残りやすい漏れ。
 6. **個別ケースの5軸採点と共通作業の難易度** → `ai/assessments.json` → `validate-stage --stage assessments`
    詳細: [references/assessment.md](references/assessment.md)
 7. **計算・検証・出力**: `scripts/estimator calculate --run <id>` → `validate --run <id>` → `export --run <id>`
 8. **意味レビュー（別パス）**: 結果を見直し、指摘を `ai/semantic_review.json` に書く（計算結果は書き換えない）→
-   `scripts/estimator mark-review --run <id> --by ai --context independent|self`。
+   各指摘に対応して `resolution`（fixed / question / rejected / deferred と note）を記録（直したら工程7をやり直す）→
+   `scripts/estimator mark-review --run <id> --by ai --context independent|self`。対応が未記録の指摘があると記録を拒否する。
    作成者と別コンテキストのレビュー役（サブエージェント）に任せられれば `independent`、本人が見直した場合は `self`。
    `mark-review` は既に出力済みの `validation.json`・`summary.md`・`estimate.xlsx` の意味レビュー状態も更新する。
    `self` は「AIレビュー済（自己レビュー）」と表示され、独立レビューとは区別される。詳細: [references/review.md](references/review.md)
@@ -62,4 +72,4 @@ CLIは `scripts/estimator <command>`。各コマンドはJSONを出力する。
 - `runs/<id>/` に `estimate.json`、`validation.json`、`estimate.xlsx`、`summary.md` がある。
 - `validate` の結果（`machine_validation`、`execution_status`、`estimate_completeness`）をそのまま報告する。
 - 最終報告では、算定済み総計を「確定総額」と呼ばない（未算定・Impossible・要確認が残る場合）。
-  要確認件数、Impossible件数、主要な確認事項、意味レビューが人確認済みでないことを明記する。
+  要確認件数、Impossible件数、保留した未確定部分、主要な確認事項、意味レビューの未対応の指摘、意味レビューが人確認済みでないことを明記する。

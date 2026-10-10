@@ -18,7 +18,8 @@ from .run import (AI_FILES, ROOT, RunError, environment_info, harness_fingerprin
                   _file_record, _resolve)
 from .schemas import schema_errors
 from .standards import digest_exclude_patterns, load_adapter, load_standards, standards_text, strip_private
-from .validate import STAGE_VALIDATORS, summarize_warnings, validate_all, validate_semantic_review
+from .validate import (STAGE_VALIDATORS, review_resolution_counts, summarize_warnings, validate_all,
+                       validate_semantic_review)
 
 
 def _out(obj) -> None:
@@ -234,15 +235,26 @@ def cmd_calculate(a) -> int:
 
 
 def _semantic_status(rd: Path) -> str:
+    """意味レビューの状態。AIレビューは記録（mark-review）があるときだけ「済」とし、
+    自己レビュー・未対応の指摘・レビュー後の見積もり変更を併記する（「済」が指摘なしと誤読されないように）。"""
     human = rd / "review" / "human_review.json"
     if human.exists():
         return "人確認済"
-    if (rd / "ai" / "semantic_review.json").exists():
-        rec = rd / "review" / "ai_review.json"
-        if rec.exists() and read_json(rec).get("context") == "self":
-            return "AIレビュー済（自己レビュー）"
-        return "AIレビュー済"
-    return "未実施"
+    rec_p = rd / "review" / "ai_review.json"
+    counts = review_resolution_counts(rd)
+    if counts is None or not rec_p.exists():
+        return "未実施"
+    rec = read_json(rec_p)
+    notes = []
+    if rec.get("context") == "self":
+        notes.append("自己レビュー")
+    open_n = counts["deferred"] + counts["unresolved"]
+    if open_n:
+        notes.append(f"未対応{open_n}件")
+    est = rd / "estimate.json"
+    if rec.get("estimate_sha256") and est.exists() and sha256_file(est) != rec["estimate_sha256"]:
+        notes.append("レビュー記録後に見積もり変更")
+    return "AIレビュー済" + (f"（{'・'.join(notes)}）" if notes else "")
 
 
 def cmd_validate(a) -> int:
@@ -256,7 +268,7 @@ def cmd_validate(a) -> int:
               for s in ("normalize", "common_design", "assessments")}
     exec_ok = est is not None and not machine["stages"]["sources"]["errors"] and \
         not machine["stages"]["standards"]["errors"] and \
-        not any(e["code"] in ("RECOMPUTE_MISMATCH", "RECOMPUTE_FAILED") for e in machine["stages"]["calculate"]["errors"])
+        not any(e["code"] in ("RECOMPUTE_MISMATCH", "RECOMPUTE_FAILED", "RULE_VERSION_CHANGED") for e in machine["stages"]["calculate"]["errors"])
     validation = {
         "schema_version": 1,
         "validated_at": now_iso(),
@@ -316,10 +328,16 @@ def cmd_mark_review(a) -> int:
         p = rd / "ai" / "semantic_review.json"
         if not p.exists():
             raise RunError("ai/semantic_review.json（指摘一覧）を先に作成してください")
-        bad = [e for e in validate_semantic_review(rd) if e.get("severity", "error") == "error"]
+        errs = validate_semantic_review(rd)
+        bad = [e for e in errs if e.get("severity", "error") == "error"]
         if bad:
             raise RunError("ai/semantic_review.json の検証エラー: " + "; ".join(f"{e['path']} {e['message']}" for e in bad[:5])
                            + "（validate-stage --stage semantic_review で詳細確認）")
+        unresolved = [e["path"] for e in errs if e["code"] == "FINDING_UNRESOLVED"]
+        if unresolved:
+            raise RunError(f"対応が未記録の指摘が {len(unresolved)} 件あります（{', '.join(unresolved[:5])}）。"
+                           "各指摘に resolution（fixed/question/rejected/deferred と note）を書いてから記録してください。"
+                           "直したら calculate → validate → export をやり直してから記録します")
         if not a.context:
             raise RunError("--by ai には --context independent|self が必要です"
                            "（independent=見積もり作成と別コンテキストのレビュー役、self=作成者本人のレビュー）")

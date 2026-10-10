@@ -106,17 +106,22 @@ scripts/estimator evaluate --suite evals/suites/automationexercise.yaml
 | `ai/*.json` | AI提出物（項目整理・共通設計・採点・確認事項・意味レビュー） |
 | `estimate.json` | スクリプトが算出した工数（構成案別、下限/標準/上限） |
 | `validation.json` | 機械検証・再計算照合・状態（execution_status / machine_validation / estimate_completeness / semantic_review_status） |
-| `estimate.xlsx` | サマリー、個別ケース、共通作業、原項目対応、確認事項、レビュー、検証結果、実行条件 |
+| `estimate.xlsx` | サマリー、個別ケース、共通作業、原項目対応、確認事項、意味レビュー、レビュー、検証結果、実行条件 |
 | `summary.md` | 簡潔な結果 |
 | `stage_state.json` / `logs/` | 工程状態・コマンド履歴 |
 
 状態の意味は混同しない: `difficulty`（Low/Mid/High/Impossible/null）、`estimate_status`（確定可能/条件付き/要確認）、
 `scope`（対象内/別見積/対象外）、`execution_status`（処理成功/処理失敗）、`estimate_completeness`（全対象算定/一部未算定）、
-`semantic_review_status`（未実施/AIレビュー済/AIレビュー済（自己レビュー）/人確認済）。「算定済み総計」は一部未算定のとき案件全体の確定総額ではない。
+`semantic_review_status`（未実施/AIレビュー済/人確認済。AIレビュー済には「自己レビュー」「未対応N件」「レビュー記録後に見積もり変更」を括弧で併記）。
+意味レビューの各指摘には対応（`resolution`: fixed/question/rejected/deferred）を記録し、`mark-review --by ai` は未記録の指摘があると拒否する。「算定済み総計」は一部未算定のとき案件全体の確定総額ではない。
 
 ## 計算ルール（実装）
-- 個別ケース（ルール版 `case-rule-1`）: 対象外/別見積を分離 → 実現不可確認済はImpossible → 情報不足・未採点軸ありは要確認(null)
+- 計算規則の版は `src/estimator/__init__.py`（現行 `case-rule-2` / `common-rule-2`）。計算結果が変わる変更では必ず上げる。
+  上げ忘れは `tests/test_calc_version.py` が固定入力の計算結果の指紋（`tests/golden/calculate_fingerprint.json`）で検出する。
+  版が違う estimate.json は再計算照合で `RULE_VERSION_CHANGED`（手編集・上流変更の `RECOMPUTE_MISMATCH` と区別）。
+- 個別ケース: 対象外/別見積を分離 → 実現不可確認済はImpossible → 情報不足・未採点軸ありは要確認(null)
   → いずれか3点または合計≧High閾値でHigh → 合計≦Low上限でLow → 残りMid。閾値・単価は基準Excelのセル値。
+  原項目の未確定部分（`pending_parts`、ケースにせず保留したもの）は未解決件数に数える。
 - 共通作業: `種別ID|難易度` で共通工数表を参照し、単価×構成要素数。基準にないキーは未算定（0や近似にしない）。
   既存流用は適合性確認済のときだけ新規実装分0。改修は変更責務を明示して同じ単価表を適用（割引なし）。
   `cost_owner` が他作業なら計上しない。同一構成案・同種別で同じ要素の重複計上は検証エラー。
@@ -133,6 +138,8 @@ uv run pytest -q
 - `test_extract.py`: 結合セルを前方補完しない、非表示行/シート、数式キャッシュ無し、`=`始まりの文字列、列順・列名・シート名・ファイル名・説明行の変更、画像・コメント検出、非対応形式、出力時に数式化しない。
 - `test_pipeline.py`: CLI全工程、手編集した estimate.json の拒否、AIの計算値提出の拒否、領域の処遇漏れと修正上限、重複計上、重複候補の根拠、不正なセル参照、上流変更による無効化、入力変更検出、案件マニフェスト、入力欠落の記録。
 - `test_items.py`: 項目群の展開（複数行＋結合セル、IDなし、行数不整合、範囲外）、列の値による項目選択、.xlsm読込とVBA検出、大規模形式でのCLI全工程、見積もり状態規則（RULE-07・RULE-03）、共通作業のImpossible、条件一覧の出力。
+- `test_review_and_coverage.py`: 意味レビュー指摘の対応記録と状態、計算規則の版変更の区別、未確定部分の保留、共通部品との二重加点の警告、前提行の追跡、形式横断の一貫性評価。
+- `test_calc_version.py`: 計算規則の版の上げ忘れ検出（固定入力の計算結果の指紋）。
 - `test_guardrails.py`: Hooks（保護対象への編集拒否、スキーマ通知、Stopの回数制限）と見積もり設定の生成。
 
 ### 権限テスト（実機）
@@ -150,6 +157,10 @@ scripts/estimator evaluate --suite evals/suites/automationexercise.yaml
 - 期待事項（`evals/expectations/`）は実行時AIの出力から作らない。`review_status` が `human_reviewed` でない結果は暫定。
 - 件数は評価資料にだけ記載し、解析ロジックには持たない。
 - 人のレビューには `estimate.xlsx` の「レビュー」シート（AIの分解・採点・理由と、判定記入欄）を使う。
+- `consistency_groups`: 同じ内容を別書式で書いた項目書群（01〜06）の最新runどうしで、工数・件数のばらつき、
+  原IDごとの難易度の食い違い、入力ごとの試行回数（前のrunのAI成果物を流用したrunは独立試行に数えない）を出す。
+  許容幅（`tolerances`）は評価担当者が決める。未記入なら `report_only` で合否にしない。
+- 計算規則の版が変わった後の古いrunは `calculation_reproducible` が失敗し、理由に版の変更が出る（`calculate` の再実行で解消）。
 
 ## 開発モードと見積もりモードの切替
 

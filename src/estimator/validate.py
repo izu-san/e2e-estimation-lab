@@ -9,10 +9,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from openpyxl.utils import range_boundaries
+from openpyxl.utils import get_column_letter, range_boundaries
 
-from .calculate import calculate
-from .io_utils import read_json, sha256_json
+from .calculate import calculate, compare_estimate
+from .io_utils import read_json
 from .items import expand_normalized, load_normalized
 from .schemas import schema_errors
 
@@ -102,6 +102,9 @@ def validate_normalize(rd: Path) -> list[dict]:
                 errs.append(E("UNKNOWN_REGION", p, f"領域 {rid} は存在しません"))
         for k, ref in enumerate(it["refs"]):
             errs += _check_ref(ref, sheets, f"{p}/refs/{k}")
+        for k, part in enumerate(it.get("pending_parts", [])):
+            for j, ref in enumerate(part.get("refs", [])):
+                errs += _check_ref(ref, sheets, f"{p}/pending_parts/{k}/refs/{j}")
         for k, inh in enumerate(it.get("inheritance", [])):
             errs += _check_ref(inh["ref"], sheets, f"{p}/inheritance/{k}/ref")
             errs += _check_ref(inh["from_ref"], sheets, f"{p}/inheritance/{k}/from_ref")
@@ -364,6 +367,8 @@ def validate_assessments(rd: Path) -> list[dict]:
         for q in a.get("question_ids", []):
             if q not in q_ids:
                 errs.append(E("UNKNOWN_QUESTION", p, f"question_id {q} が questions.json にありません"))
+    errs += _pending_split_cases(data, norm)
+    errs += _component_overlap(data, design, std)
     errs += _usage_consistency(data, design)
     errs += _question_links(data, design, norm, rd)
     errs += _bare_evidence_refs(data)
@@ -406,6 +411,111 @@ def validate_assessments(rd: Path) -> list[dict]:
             errs.append(E("UNASSESSED", "common_assessments", f"{cid} の難易度判定がありません（未算定になります）",
                           "warning"))
     return errs
+
+
+def _pending_split_cases(data: dict, norm: dict) -> list[dict]:
+    """原項目を分解し、一部だけが要確認になったケース（未確定部分の置き場になった疑似ケース）を警告する。
+    未確定部分はケースにせず source_items の pending_parts に保留する（ケース数を水増ししない）。"""
+    errs: list[dict] = []
+    status: dict[str, set[str]] = {}
+    for a in data["case_assessments"]:
+        status.setdefault(a["case_id"], set()).add(a["estimate_status"])
+    kids: dict[str, list[str]] = {}
+    for c in norm["cases"]:
+        if c["relation"] == "split" and len(c["source_item_ids"]) == 1:
+            kids.setdefault(c["source_item_ids"][0], []).append(c["case_id"])
+    for sid, cids in kids.items():
+        pending = [c for c in cids if status.get(c) == {"要確認"}]
+        decided = [c for c in cids if status.get(c) and "要確認" not in status[c]]
+        for c in pending if decided else []:
+            errs.append(E("PENDING_SPLIT_CASE", f"cases({c})",
+                          f"{sid} から分解したケースのうち {c} だけが要確認です（{', '.join(decided)} は算定）。"
+                          "仕様未提示の部分を切り出しただけなら、ケースにせず source_items の pending_parts に保留してください",
+                          "warning"))
+    return errs
+
+
+def _component_overlap(data: dict, design: dict, std: dict) -> list[dict]:
+    """共通部品が所有する作業（データ作成・削除、業務フローの操作列など）を、ケースの軸でも加点していないか。
+    対象の軸と部品種別はアダプター（cases.component_overlap）から取る。該当する軸に overlap_note が無ければ警告する。"""
+    rule = std["cases"].get("component_overlap") or {}
+    pairs = rule.get("pairs") or []
+    min_score = rule.get("min_score")
+    if not pairs or min_score is None:
+        return []
+    errs: list[dict] = []
+    types = {c["component_id"]: c["type_id"] for c in design["components"]}
+    for n, a in enumerate(data["case_assessments"]):
+        used_types: dict[str, list[str]] = {}
+        for u in a.get("uses_components", []):
+            if u in types:
+                used_types.setdefault(types[u], []).append(u)
+        for pr in pairs:
+            v = a["axes"].get(pr["axis"])
+            hits = [cid for t in pr["component_types"] for cid in used_types.get(t, [])]
+            if v and hits and v["score"] is not None and v["score"] >= min_score and not (v.get("overlap_note") or "").strip():
+                errs.append(E("AXIS_COMPONENT_OVERLAP", f"case_assessments/{n}({a['case_id']})/axes/{pr['axis']}",
+                              f"{pr['axis']}={v['score']} ですが、このケースは {', '.join(hits)} を使います。"
+                              "部品が所有する作業をこの軸で再び加点していないか確認し、ケース固有に残る作業を overlap_note に書いてください"
+                              "（部品を呼ぶだけなら1点。個別基準 計上ルール COST-11・COST-12）", "warning"))
+    return errs
+
+
+def _premise_rows(rd: Path, questions: dict, norm: dict | None) -> list[dict]:
+    """説明・参考領域（資料情報・前提・未確定事項など）の各行が、質問の refs か premise_reviews で扱われているか（警告）。
+    前提・未確定事項の行が質問にも仮定にもならずに見落とされるのを防ぐ。"""
+    if not norm:
+        return []
+    from .items import cell_value_text
+
+    try:
+        inv = read_json(rd / "source_inventory.json")
+        raw = read_json(rd / "raw_workbook.json")
+    except (OSError, ValueError):
+        return []
+    sheets = _sheet_index(raw)
+    covered: dict[tuple[str, str], set[int]] = {}
+
+    def cover(ref: dict) -> None:
+        try:
+            _, r0, _, r1 = range_boundaries(ref["range"])
+        except ValueError:
+            return
+        covered.setdefault((ref["workbook_id"], ref["sheet"]), set()).update(range(r0, r1 + 1))
+
+    for q in questions["items"]:
+        for ref in q.get("refs", []):
+            cover(ref)
+    for pr in questions.get("premise_reviews", []):
+        cover(pr["ref"])
+    inv_by_id = {r["region_id"]: r for r in inv["regions"]}
+    errs: list[dict] = []
+    for r in norm.get("regions", []):
+        reg = inv_by_id.get(r["region_id"])
+        if r["role"] not in PREMISE_ROLES or reg is None:
+            continue
+        sh = sheets.get((reg["workbook_id"], reg["sheet"]))
+        if sh is None:
+            continue
+        min_col, min_row, max_col, max_row = range_boundaries(reg["range"])
+        cols = [get_column_letter(c) for c in range(min_col, max_col + 1)]
+        missing = []
+        for row in range(min_row, max_row + 1):
+            if row in set(r.get("header_rows", [])) or row in covered.get((reg["workbook_id"], reg["sheet"]), set()):
+                continue
+            text = " ".join(t for c in cols if (t := cell_value_text(sh, row, c).strip()))
+            if text:
+                missing.append(f"{row}行「{text[:30]}」")
+        if missing:
+            errs.append(E("PREMISE_ROW_UNTRACED", f"regions({r['region_id']})",
+                          f"{reg['sheet']} の {len(missing)} 行が質問の refs にも premise_reviews にもありません: "
+                          f"{'、'.join(missing[:8])}。前提・未確定事項なら質問/仮定として起票して refs に行を入れ、"
+                          "影響がない・反映済みなら premise_reviews に理由を書いてください（見出し行は regions の header_rows へ）", "warning"))
+    return errs
+
+
+# 前提・未確定事項が書かれやすい領域の役割（normalized_cases の regions[].role）
+PREMISE_ROLES = ("description", "reference")
 
 
 def _usage_consistency(data: dict, design: dict) -> list[dict]:
@@ -604,6 +714,15 @@ def validate_questions(rd: Path) -> list[dict]:
         return errs
     for d in _dupes([q["question_id"] for q in data["items"]]):
         errs.append(E("DUPLICATE_ID", "items", f"question_id {d} が重複しています"))
+    q_ids = {q["question_id"] for q in data["items"]}
+    norm, _ = _load(rd, "ai/normalized_cases.json")
+    for it in (norm or {}).get("source_items", []):
+        for k, part in enumerate(it.get("pending_parts", [])):
+            for q in part.get("question_ids", []):
+                if q not in q_ids:
+                    errs.append(E("UNKNOWN_QUESTION", f"source_items({it['item_id']})/pending_parts/{k}",
+                                  f"question_id {q} が questions.json にありません"))
+    errs += _premise_rows(rd, data, norm)
     return errs
 
 
@@ -667,13 +786,43 @@ def validate_semantic_review(rd: Path) -> list[dict]:
     if errs:
         return errs
     known = review_target_ids(rd)
+    q_ids = _question_ids(rd)
     for n, f in enumerate(data["findings"]):
         for field, ids in (("target", [f["target"]]), ("related", f.get("related", []))):
             for i in ids:
                 if i not in known:
                     errs.append(E("UNKNOWN_TARGET", f"findings/{n}/{field}",
                                   f"{i} は成果物に存在するID（case_id/component_id/item_id/region_id/question_id/arch_id）でも overall でもありません"))
+        res = f.get("resolution")
+        if res is None:
+            errs.append(E("FINDING_UNRESOLVED", f"findings/{n}({f['target']})",
+                          "指摘への対応 resolution がありません（fixed/question/rejected/deferred と note）。"
+                          "mark-review --by ai の前に全指摘へ対応を記録してください", "warning"))
+            continue
+        if res["status"] == "question":
+            if not res.get("question_ids"):
+                errs.append(E("NO_QUESTION", f"findings/{n}/resolution", "status=question には起票した question_ids が必要です"))
+            for q in res.get("question_ids", []):
+                if q not in q_ids:
+                    errs.append(E("UNKNOWN_QUESTION", f"findings/{n}/resolution",
+                                  f"question_id {q} が questions.json にありません"))
     return errs
+
+
+def review_resolution_counts(rd: Path) -> dict[str, int] | None:
+    """意味レビュー指摘の対応状況の件数。対応未記録は unresolved。指摘ファイルが無ければNone。"""
+    p = rd / "ai/semantic_review.json"
+    if not p.exists():
+        return None
+    try:
+        findings = read_json(p).get("findings", [])
+    except ValueError:
+        return None
+    out = {"total": len(findings), "fixed": 0, "question": 0, "rejected": 0, "deferred": 0, "unresolved": 0}
+    for f in findings:
+        st = (f.get("resolution") or {}).get("status")
+        out[st if st in out else "unresolved"] += 1
+    return out
 
 
 STAGE_VALIDATORS = {
@@ -736,7 +885,12 @@ def validate_all(rd: Path, config: dict) -> dict:
             recomputed = calculate(std, load_normalized(rd),
                                    read_json(rd / "ai/common_design.json"), read_json(rd / "ai/assessments.json"),
                                    config)
-            if sha256_json(recomputed) != sha256_json(est):
+            verdict = compare_estimate(est, recomputed)
+            if verdict == "rule_version_changed":
+                calc_errs.append(E("RULE_VERSION_CHANGED", "estimate.json",
+                                   f"計算規則の版が変わっています（estimate: {est.get('rule_versions')}、現行: "
+                                   f"{recomputed['rule_versions']}）。calculate を再実行してください"))
+            elif verdict == "mismatch":
                 calc_errs.append(E("RECOMPUTE_MISMATCH", "estimate.json",
                                    "estimate.json が現在の採点・基準からの再計算結果と一致しません（手編集または上流変更）"))
         except (KeyError, TypeError, ValueError) as ex:

@@ -47,6 +47,15 @@ cases:
     ambiguity_axis: AX-04
     conditional_min_score: 2
     rule_ref: 総合判定!C8 (RULE-07)
+  # 共通部品との二重計上の確認（検証器の警告 AXIS_COMPONENT_OVERLAP）。基準の数値ではなく検証の対象指定。
+  # ケースが右の種別の部品を使い、左の軸が min_score 以上なら、軸に overlap_note（ケース固有に残る作業）を求める。
+  # 根拠: 個別基準 計上ルール COST-11（DATA/FIXを呼ぶケースのAX-05は1点）・COST-12（AX-01はケース固有の画面・分岐だけ）。
+  # 経緯は docs/standards_questions.md（SQ-01）。
+  component_overlap:
+    min_score: 2
+    pairs:
+      - {axis: AX-05, component_types: [DATA, FIX]}
+      - {axis: AX-01, component_types: [FLOW]}
   # 「判定例」シート。総合判定ロジックの回帰テスト（tests/test_standards.py）にだけ使う。
   example:
     sheet_pattern: "^判定例$"
@@ -68,7 +77,7 @@ cases:
   digest_exclude_sheets: ["^AI出力仕様$"]
   # 基準の文章（非数値セル）のフィンガープリント。ルール版の確認後に記入する。
   # null: 未承認として警告。値あり＋不一致: エラー（文章変更時はルール実装の確認が必要）。
-  approved_text_fingerprint: dd3150fcd98a4a8c5f7cfdb2a3662d397b718618f825cccef4afa8fbb6894b0a
+  approved_text_fingerprint: e32cb229f9aa9ca789b080f50f9a5d1040e3a7ff3ac58d43961998752645d71f
 
 common:
   version:

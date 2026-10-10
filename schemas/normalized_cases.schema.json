@@ -185,6 +185,39 @@
           },
           "question_ids": {
             "$ref": "defs.schema.json#/$defs/id_list"
+          },
+          "pending_parts": {
+            "description": "項目のうち仕様未提示などで算定できない部分。ケースに切り出さずここに保留し、未解決件数に数える",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "summary",
+                "question_ids"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "summary": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "保留した部分（原文の要約）"
+                },
+                "refs": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "defs.schema.json#/$defs/ref"
+                  }
+                },
+                "question_ids": {
+                  "allOf": [
+                    {
+                      "$ref": "defs.schema.json#/$defs/id_list"
+                    }
+                  ],
+                  "minItems": 1
+                }
+              }
+            }
           }
         }
       }

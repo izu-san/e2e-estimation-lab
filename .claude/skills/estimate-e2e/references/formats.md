@@ -72,17 +72,27 @@
   {"question_id": "Q-001", "kind": "question", "targets": ["C-004"], "text": "決済はテスト用カードを利用できますか",
    "impact": "C-004 は要確認（難易度null）", "proposed_default": "", "status": "open"},
   {"question_id": "Q-002", "kind": "assumption", "targets": ["A1"], "text": "POMを採用する前提",
-   "impact": "PAGE作業の有無", "status": "assumed"}
+   "impact": "PAGE作業の有無", "status": "assumed"},
+  {"question_id": "Q-003", "kind": "question", "targets": ["RUN-001"], "text": "安定実行の受入基準（連続実行の本数・合格率）は",
+   "impact": "RUN-001 の範囲", "status": "open",
+   "refs": [{"workbook_id": "W1", "sheet": "資料情報", "range": "B7"}]}
+],
+ "premise_reviews": [
+  {"ref": {"workbook_id": "W1", "sheet": "資料情報", "range": "A2:B4"},
+   "reason": "対象サイト・ツール・ブラウザーの前提。案件設定と共通設計（BASE-001）に反映済み"}
 ]}
 ```
+説明・参考領域の各行は、質問の `refs` か `premise_reviews` のどちらかに入れる（`PREMISE_ROW_UNTRACED` 警告）。
 `kind`: question / assumption / impossible_reason / constraint（読めない図など）/ standards_issue（基準内の矛盾）。
 
-## ai/semantic_review.json（レビュー役）
+## ai/semantic_review.json（レビュー役の指摘 ＋ 本セッションの対応）
 ```json
 {"schema_version": 1, "reviewer": "ai", "findings": [
-  {"target": "C-007", "related": ["C-008"], "kind": "over_split", "message": "…", "suggestion": "…"}
+  {"target": "C-007", "related": ["C-008"], "kind": "over_split", "message": "…", "suggestion": "…",
+   "resolution": {"status": "fixed", "note": "C-007 を C-008 に統合し再計算"}}
 ]}
 ```
+`resolution` はレビュー役ではなく本セッションが書く。詳細は review.md。
 
 ## ケース（cases）の全フィールドの注意
 - `preconditions` / `steps` / `expected` は**文字列の配列**（1件でも `["…"]`）。文字列を直接入れるとSCHEMAエラー。

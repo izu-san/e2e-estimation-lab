@@ -44,3 +44,13 @@
 | POM_ASSUMPTION_NOT_CONDITIONAL（警告） | POM未指定でPOM採用案を作るなら、PAGE作業を条件付きにして仮定・再見積条件を書く（共通基準 COMMON-OUT-01） |
 | QUESTION_NOT_INHERITED（警告） | 依存先の部品が未解決の質問を持つのに、ケースが確定可能。conditionsとquestion_idsに影響を残す |
 | EVIDENCE_COMPONENT_NOT_USED（警告） | 根拠が言及する部品を `uses_components`/`used_by` に入れるか、言及を直接/経由で揃える |
+
+## runs/ 横断調査で見つかった再発への対策（2026-10 追加）
+| code | 対応 |
+|---|---|
+| FINDING_UNRESOLVED（警告。mark-review は拒否） | 意味レビューの各指摘に `resolution` を書く（review.md） |
+| NO_QUESTION | `resolution.status: question` には起票した `question_ids` を書く |
+| RULE_VERSION_CHANGED | 計算規則の版が変わった。AIの成果物はそのままで `calculate` → `validate` → `export` を再実行する |
+| PENDING_SPLIT_CASE（警告） | 分解したケースの一部だけが要確認。仕様未提示の部分を切り出しただけなら、ケースをやめて原項目の `pending_parts` に保留する |
+| AXIS_COMPONENT_OVERLAP（警告） | DATA/FIX を使うケースの AX-05、FLOW を使うケースの AX-01 が2点以上。部品の作業を除いて残るケース固有の作業を軸の `overlap_note` に書くか、点数を見直す |
+| PREMISE_ROW_UNTRACED（警告） | 資料情報・前提の行が質問にも premise_reviews にもない。前提・未確定事項なら質問/仮定にして `refs` に行を入れ、影響がなければ `premise_reviews` に理由を書く |

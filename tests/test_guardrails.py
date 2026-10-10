@@ -128,3 +128,20 @@ def test_reviewer_agent_is_read_only():
     front = text.split("---")[1]
     tools = [l for l in front.splitlines() if l.startswith("tools:")][0].split(":", 1)[1]
     assert {t.strip() for t in tools.split(",")} <= {"Read", "Grep", "Glob"}  # 書込み・実行系を持たせない
+
+
+def test_bash_guide_explains_allowed_form(tmp_path):
+    """見積もりモードで許可されないBashに、使える形と代替ツールを返す（許可は広げない）。"""
+    rd = tmp_path / "runs" / "r1"
+    rd.mkdir(parents=True)
+    for cmd in ("R=runs/x && ls -la $R", "cat runs/x/source_inventory.json", "ls -R runs",
+                "scripts/estimator status --run r1 && ls", "scripts/estimator render --run r1 | head",
+                "scripts/estimatorX status"):
+        out = hook("bash_guide.py", {"tool_name": "Bash", "tool_input": {"command": cmd}}, est_env(rd))
+        o = out["hookSpecificOutput"]
+        assert o["permissionDecision"] == "deny", cmd
+        assert "scripts/estimator" in o["permissionDecisionReason"] and "Read" in o["permissionDecisionReason"]
+    for cmd in ("scripts/estimator status --run r1", f"{ROOT}/scripts/estimator validate-stage --run r1 --stage normalize",
+                "scripts/estimator render --run r1 --sheet テスト一覧 --rows 1-80"):
+        assert hook("bash_guide.py", {"tool_name": "Bash", "tool_input": {"command": cmd}}, est_env(rd)) is None, cmd
+    assert hook("bash_guide.py", {"tool_name": "Bash", "tool_input": {"command": "ls"}}) is None  # 開発モードでは何もしない

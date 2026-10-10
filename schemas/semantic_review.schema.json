@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "semantic_review.schema.json",
-  "title": "意味レビューの指摘（レビュー役の提出）。計算結果は含めない",
+  "title": "意味レビューの指摘（レビュー役の提出）と、見積もり作成側の対応記録。計算結果は含めない",
   "type": "object",
   "required": ["schema_version", "reviewer", "findings"],
   "additionalProperties": false,
@@ -21,7 +21,19 @@
           "kind": {"enum": ["over_split", "under_split", "missing_item", "duplicate", "double_count",
                             "scoring", "status", "question_missing", "other"]},
           "message": {"type": "string", "minLength": 1},
-          "suggestion": {"type": "string", "minLength": 1}
+          "suggestion": {"type": "string", "minLength": 1},
+          "resolution": {
+            "type": "object",
+            "description": "見積もり作成側の対応（レビュー役は書かない）。mark-review --by ai は全指摘に必須",
+            "required": ["status", "note"],
+            "additionalProperties": false,
+            "properties": {
+              "status": {"enum": ["fixed", "question", "rejected", "deferred"],
+                         "description": "fixed=成果物を直し再計算済 / question=確認事項に起票 / rejected=指摘に当たらない / deferred=未対応のまま残す"},
+              "note": {"type": "string", "minLength": 1, "description": "何をどう直したか、または直さない理由"},
+              "question_ids": {"$ref": "defs.schema.json#/$defs/id_list", "description": "status=question のとき起票した質問ID"}
+            }
+          }
         }
       }
     }

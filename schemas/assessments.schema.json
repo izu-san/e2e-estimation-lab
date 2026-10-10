@@ -43,6 +43,10 @@
         },
         "assumptions": {
           "$ref": "defs.schema.json#/$defs/text_list"
+        },
+        "overlap_note": {
+          "type": "string",
+          "description": "使う共通部品（DATA・FIX・FLOW等）が所有する作業と重ならない、ケース固有に残る作業。部品と同じ作業を軸で再加点しない"
         }
       }
     }

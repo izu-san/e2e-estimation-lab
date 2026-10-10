@@ -17,3 +17,21 @@ runs:
   # 本番想定の大規模項目書（.xlsm、8機能シート×300件、うち2シートは1ケース3行・結合セル）
   - input: inputs/AutomationExercise_大規模テスト項目書_2400件.xlsm
     expectation: evals/expectations/ae_large_2400.yaml
+
+# 形式横断の一貫性。01〜06 は同じ20項目を書式だけ変えた項目書なので、結果は本来そろうはず。
+# 最新runどうしの指標のばらつきと、原ID（AE-xxx）ごとの難易度の食い違いを出す。
+# tolerances は評価担当者が決める許容幅（未記入なら report_only で合否にしない）。
+consistency_groups:
+  - name: automationexercise-formats
+    description: 同じ20項目を6つの書式で書いた項目書（01〜06）
+    inputs:
+      - inputs/AutomationExercise_01_詳細形式.xlsx
+      - inputs/AutomationExercise_02_少数列_粗粒度.xlsx
+      - inputs/AutomationExercise_03_横持ち形式.xlsx
+      - inputs/AutomationExercise_04_複数行_結合セル.xlsx
+      - inputs/AutomationExercise_05_IDなし_重複候補.xlsx
+      - inputs/AutomationExercise_06_複数シート_説明混在.xlsx
+    tolerances:
+      max_relative_spread: {computed_total_std: 0.1}
+      max_abs_spread: {cases_conditional: 3}
+      max_item_disagreements: 2
