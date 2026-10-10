@@ -130,7 +130,8 @@ def test_real_common_example_regression():
     assert sha256_file(m) == before  # 正本を変更していない
 
 
-CASES_REGRESSION_SHA = "1185c1ecf5b03cf72b06069e8f4e137d856290e84c1a942342d10b88e9cf4cc6"
+# 2026-10-11: 計上ルールに COST-11〜13 を追記した版（判定例シートは変更なし）
+CASES_REGRESSION_SHA = "f45b9677cab6b92fdda8f1cc10f055e07a0358d03cd0b52b41a8a6abd96c2716"
 
 
 def test_real_case_examples_regression():
