@@ -157,10 +157,20 @@ def validate_normalize(rd: Path) -> list[dict]:
                 errs.append(E("STEP_COUNT_MISMATCH", f"source_items({sid})",
                               f"分解先 {cids} の step_count 合計 {total} が親項目の step_count {it['step_count']} と一致しません。"
                               "数え方（→区切り等）を親子で揃えるか、差の理由を relation_reason に書いてください", "warning"))
+    # 統合した重複項目は source_item_ids に入れられないため、統合先ケースの文章に ID が残っているか確認する
+    for it in items:
+        if it["disposition"] != "merged_duplicate" or it["duplicate_of"] not in item_by_id:
+            continue
+        target_cases = [c for c in cases if it["duplicate_of"] in c["source_item_ids"]]
+        if target_cases and not any(it["item_id"] in " ".join([c.get("relation_reason", ""), c.get("notes", ""), c.get("summary", "")])
+                                    for c in target_cases):
+            errs.append(E("DUPLICATE_NOT_TRACED", f"source_items({it['item_id']})",
+                          f"統合先ケース {[c['case_id'] for c in target_cases]} の notes / relation_reason に {it['item_id']} の統合が書かれていません。"
+                          "統合元から統合先ケースを辿れるようにしてください", "warning"))
     # parsedの領域にテスト項目が1件も無い場合は警告
     regions_with_items = {rid for it in items for rid in it["region_ids"]}
     for r in data["regions"]:
-        if r["disposition"] == "parsed" and r["region_id"] not in regions_with_items:
+        if r["disposition"] == "parsed" and r["role"] != "data_definition" and r["region_id"] not in regions_with_items:
             errs.append(E("EMPTY_PARSED_REGION", f"regions({r['region_id']})",
                           "parsed ですがsource_itemがありません", "warning"))
     return errs
@@ -340,6 +350,7 @@ def validate_assessments(rd: Path) -> list[dict]:
         if a["estimate_status"] == "条件付き" and not a.get("conditions"):
             errs.append(E("NO_CONDITION", p, "条件付きには conditions が必要です"))
         errs += _status_rule(a, axis_ids, status_rule, p)
+        errs += _ambiguity_assumption(a, status_rule, p)
         for u in a.get("uses_components", []):
             if u not in comps:
                 errs.append(E("UNKNOWN_COMPONENT", p, f"uses_components {u} が存在しません"))
@@ -543,6 +554,17 @@ def _bare_evidence_refs(data: dict) -> list[dict]:
                               "evidence のセル座標にシート名がありません。『シート名!セル』形式で書き、views/*.md で座標を確認してください",
                               "warning"))
     return errs
+
+
+def _ambiguity_assumption(a: dict, rule: dict, p: str) -> list[dict]:
+    """あいまい度の軸が最低点（仮定なし）なのに、その軸に仮定が付いている不整合を警告する。"""
+    ax_id = (rule or {}).get("ambiguity_axis")
+    v = a["axes"].get(ax_id) if ax_id else None
+    if v and v.get("score") is not None and v["score"] < rule["conditional_min_score"] and v.get("assumptions"):
+        return [E("AXIS_ASSUMPTION_SCORE", f"{p}/axes/{ax_id}",
+                  f"{ax_id} は仮定なしの点数なのに assumptions があります。案件範囲の仮定（重複統合など）は conditions と質問に書き、"
+                  "この軸の仮定はあいまいさを理由に点数を上げるときだけ使ってください", "warning")]
+    return []
 
 
 def _status_rule(a: dict, axis_ids: list[str], rule: dict, p: str) -> list[dict]:

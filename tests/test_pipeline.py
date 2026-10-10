@@ -423,3 +423,32 @@ def test_summary_mapping_line_shows_split_and_merged():
     (line,) = _mapping_lines(norm)
     assert "原項目 3件 → 見積もりケース 3件" in line and "A" in line and "C-3" in line
     assert _mapping_lines(None) == []
+
+
+def test_duplicate_trace_and_data_definition_and_ambiguity_warnings(run, capsys):
+    rd, _ = run
+    n = normalized()
+    n["source_items"].append({**n["source_items"][1], "item_id": "DUP-1", "original_id": None, "id_assigned": True,
+                              "disposition": "merged_duplicate", "duplicate_of": n["source_items"][1]["item_id"],
+                              "reason": "完全一致"})
+    write_json(rd / "ai/normalized_cases.json", n)
+    code, errors, warns = _stage(capsys, "normalize")
+    assert code == 0 and "DUPLICATE_NOT_TRACED" in warns
+    for c in n["cases"]:
+        if n["source_items"][1]["item_id"] in c["source_item_ids"]:
+            c["notes"] = "DUP-1 を重複として統合"
+    n["regions"][0]["role"] = "data_definition"
+    write_json(rd / "ai/normalized_cases.json", n)
+    code, errors, warns = _stage(capsys, "normalize")
+    assert "DUPLICATE_NOT_TRACED" not in warns
+
+
+def test_ambiguity_axis_assumption_warns(run, capsys):
+    rd, _ = run
+    a = assessments()
+    ax = a["case_assessments"][0]["axes"]["AX-04"]
+    ax["score"] = 1
+    ax["assumptions"] = ["仮定"]
+    write_json(rd / "ai/assessments.json", a)
+    _, _, warns = _stage(capsys, "assessments")
+    assert "AXIS_ASSUMPTION_SCORE" in warns

@@ -101,5 +101,5 @@ common:
     optional_columns:
       status: ["見積状態", "状態", "算定状態"]
       kind: ["実装区分"]
-  digest_exclude_sheets: ["^AI出力仕様$"]
+  digest_exclude_sheets: ["^AI出力仕様$", "^工数表$"]   # 工数表は数値表のため省く（値は standards.json、全文は common.md）
   approved_text_fingerprint: e440b7241a431f85a54a05ccbdf895fefe729674505c232613abe18910fcb599

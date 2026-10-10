@@ -10,7 +10,7 @@
 | test_table / test_block | テスト項目の表・項目のまとまり |
 | heading / description / legend | 表題・説明文・凡例 |
 | reference / revision_history | 参考情報・改版履歴 |
-| data_definition | テストデータ定義（データパターン数の根拠になり得る） |
+| data_definition | テストデータ定義（データパターン数の根拠になり得る） |。項目を抽出しないので `not_test` でよい（`parsed` でも警告は出ない）
 | drawing | 図・画像（内容は読めていない前提） |
 | unreadable / other | 読めない・判断できない |
 
@@ -23,6 +23,8 @@
 - `step_count` / `expected_count` / `data_pattern_count` は原資料に書かれた数。不明ならnull。行数をそのまま手順数にしない。
 - 重複候補: 完全一致でも削除しない。統合する場合は `disposition: merged_duplicate`、`duplicate_of` に統合先、`reason` に根拠。
   統合しない場合は `mapped` のまま `duplicate_of` に候補を記録し、`reason` に判断を書く。
+- 統合した重複項目（`merged_duplicate`）は、ケースの `source_item_ids` に入れない（`ITEM_NOT_MAPPED`）。統合先ケースの `notes` または
+  `relation_reason` に統合元の item_id と統合の理由を書き、統合元から統合先を辿れるようにする（書かないと `DUPLICATE_NOT_TRACED` 警告）。
 - 結合セル・空欄から値を引き継いだら `inheritance` に `ref`（空欄側）・`from_ref`（値の出所）・`reason` を書く。
 - テストでない行（参考・説明）を項目にしない。項目らしいが判断できないものは `needs_question`。
 

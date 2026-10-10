@@ -31,6 +31,8 @@
 | USAGE_MISMATCH | `common_design.json` の `used_by` と `assessments.json` の `uses_components` を一致させる。部品を使うケースは両方に書く（RUN・BASEなど全ケースが使う部品も含む）。どちらが正しいかは責務から決める |
 | STEP_COUNT_MISMATCH（警告） | 親項目と分解先ケースの `step_count` の数え方を揃える。意図して違う場合は `relation_reason` に理由を書く |
 | QUESTION_NOT_LINKED / QUESTION_TARGET_MISSING（警告） | 質問の `targets` と、ケース・共通作業の `question_ids` を双方向でそろえる。同じ前提に依存する他のケースの漏れも探す |
+| DUPLICATE_NOT_TRACED（警告） | 統合した重複項目の item_id を、統合先ケースの `notes` / `relation_reason` に書く |
+| AXIS_ASSUMPTION_SCORE（警告） | あいまい度が仮定なしの点数なのに軸に assumptions がある。案件範囲の仮定は conditions と質問へ移すか、あいまいさがあるなら点数を見直す |
 | EVIDENCE_REF_NO_SHEET（警告） | evidence のセル座標は `シート名!セル`（例: `確認リスト!C3`）。`views/*.md` で実際の座標を確認する。列Aが「No.」の場合、手順・期待結果は別の列にある |
 
 ## 基準への接地チェック（2026-10 追加）
