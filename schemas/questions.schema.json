@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "questions.schema.json",
+  "title": "確認事項・仮定・不可理由（AI提出）",
+  "type": "object",
+  "required": ["schema_version", "items"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["question_id", "kind", "targets", "text", "impact", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "question_id": {"$ref": "defs.schema.json#/$defs/id"},
+          "kind": {"enum": ["question", "assumption", "impossible_reason", "constraint", "standards_issue"]},
+          "targets": {"description": "関係するcase_id/component_id/item_id/region_id", "type": "array", "items": {"type": "string"}},
+          "refs": {"type": "array", "items": {"$ref": "defs.schema.json#/$defs/ref"}},
+          "text": {"type": "string", "minLength": 1},
+          "impact": {"type": "string"},
+          "proposed_default": {"type": "string"},
+          "status": {"enum": ["open", "assumed", "resolved"]}
+        }
+      }
+    }
+  }
+}

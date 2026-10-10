@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "config.schema.json",
+  "title": "案件設定（estimate.yaml）",
+  "type": "object",
+  "required": ["schema_version", "standards"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "standards": {
+      "type": "object",
+      "required": ["cases", "common"],
+      "additionalProperties": false,
+      "properties": {
+        "cases": {"type": "string"},
+        "common": {"type": "string"},
+        "adapter": {"type": "string"}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "automation_tool": {"type": "string"},
+        "language": {"type": "string"},
+        "browsers": {"type": "array", "items": {"type": "string"}},
+        "environments": {"type": "integer", "minimum": 1}
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pom": {"enum": ["enabled", "disabled", "compare", "unspecified"]},
+        "existing_assets": {"type": "string"}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "excluded_type_ids": {"description": "設定で明示的に対象外とする共通種別ID", "type": "array", "items": {"type": "string"}},
+        "notes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "uncertainty": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow_explicit_assumptions": {"type": "boolean"},
+        "on_unresolved": {"enum": ["continue_as_pending", "stop"]}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "site_interaction": {"const": false},
+        "max_repair_attempts": {"type": "integer", "minimum": 0, "maximum": 10},
+        "chunk_rows": {"type": "integer", "minimum": 10}
+      }
+    }
+  }
+}

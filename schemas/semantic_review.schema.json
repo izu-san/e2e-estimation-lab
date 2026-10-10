@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "semantic_review.schema.json",
+  "title": "意味レビューの指摘（レビュー役の提出）。計算結果は含めない",
+  "type": "object",
+  "required": ["schema_version", "reviewer", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "reviewer": {"const": "ai"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["target", "kind", "message", "suggestion"],
+        "additionalProperties": false,
+        "properties": {
+          "target": {"type": "string", "minLength": 1,
+                     "description": "case_id / component_id / item_id / region_id / question_id / arch_id のいずれか。全体に関わる指摘は overall"},
+          "related": {"$ref": "defs.schema.json#/$defs/text_list", "description": "関連するID（実在するもの）"},
+          "kind": {"enum": ["over_split", "under_split", "missing_item", "duplicate", "double_count",
+                            "scoring", "status", "question_missing", "other"]},
+          "message": {"type": "string", "minLength": 1},
+          "suggestion": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

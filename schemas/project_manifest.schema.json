@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "project_manifest.schema.json",
+  "title": "複数ファイルで1案件とする場合の案件マニフェスト",
+  "type": "object",
+  "required": ["schema_version", "project_name", "inputs"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "project_name": {"type": "string"},
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {"type": "string"},
+          "role": {"type": "string", "description": "例: 機能A項目書 / 補足資料"}
+        }
+      }
+    },
+    "notes": {"type": "string"}
+  }
+}

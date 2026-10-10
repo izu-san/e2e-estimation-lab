@@ -1,0 +1,7 @@
+# 評価用の期待事項。実行時AIの出力から作らないこと（AIが提案した候補は review_status: unreviewed）。
+# review_status: from_guide = 実装指示書の記載のみに基づく / human_reviewed = 評価担当者が資料を見て確認済み
+review_status: from_guide
+description: 操作・判定の組が横に並ぶ形式（横の組を独立ケースと誤認しない）
+expect:
+  source_items: {min: 1}
+  machine_validation: passed

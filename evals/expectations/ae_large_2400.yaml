@@ -1,0 +1,14 @@
+# 評価用の期待事項。実行時AIの出力から作らないこと（AIが提案した候補は review_status: unreviewed）。
+# review_status: from_material = 資料自身の記載（利用案内・ケース索引シート）のみに基づく
+review_status: from_material
+description: >-
+  本番想定の大規模項目書。機能シート8枚×300件＝2,400件（利用案内B6、ケース索引B13）。
+  各機能は10観点×10データ×3ブラウザー（基本観点80種類、ブラウザーを除く組合せ800件）。
+  カート・注文と請求書は1ケース3行＋結合セル、ログインと状態は横持ち、問い合わせは少数列・長文。
+  「2,400種類の別実装を必要とするという意味ではない」（利用案内B7）ため、整理後ケース数は2,400未満になり得る。
+expect:
+  source_items: {min: 2400, max: 2400}
+  cases: {min: 1, max: 2400}
+  non_test_regions_min:
+    - {role: data_definition, min: 1}
+  machine_validation: passed

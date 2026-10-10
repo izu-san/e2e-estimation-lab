@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# CLI入口。uvを介さず固定済みの .venv を使う（見積もり実行中に依存解決・venv更新を起こさないため）。
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PY="$ROOT/.venv/bin/python"
+if [[ ! -x "$PY" ]]; then
+  echo '{"status":"error","message":".venv がありません。開発モードで `uv sync` を実行してください"}'
+  exit 2
+fi
+export PYTHONDONTWRITEBYTECODE=1        # 読取り専用ソースへ __pycache__ を書かない
+export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+cd "$ROOT"
+exec "$PY" -B -P -m estimator.cli "$@"   # -B: bytecodeを書かない, -P: cwdをsys.pathに入れない

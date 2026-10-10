@@ -1,0 +1,34 @@
+{
+  "$comment": "OSサンドボックスによる追加防御（任意）。--sandbox で本体設定にマージする。Linux/WSL2はbubblewrapとsocat、macOSは標準機能が必要。ネイティブWindowsは非対応。",
+  "permissions": {
+    "deny": [
+      "Bash(dangerouslyDisableSandbox:true)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": true,
+    "filesystem": {
+      "denyWrite": [
+        "{ROOT}/inputs",
+        "{ROOT}/standards",
+        "{ROOT}/src",
+        "{ROOT}/scripts",
+        "{ROOT}/schemas",
+        "{ROOT}/config",
+        "{ROOT}/.claude",
+        "{ROOT}/CLAUDE.md",
+        "{ROOT}/evals",
+        "{ROOT}/tests",
+        "{ROOT}/docs",
+        "{ROOT}/.venv",
+        "{ROOT}/pyproject.toml",
+        "{ROOT}/uv.lock",
+        "{ROOT}/README.md",
+        "{SESSIONS_DIR}"
+      ]
+    }
+  }
+}

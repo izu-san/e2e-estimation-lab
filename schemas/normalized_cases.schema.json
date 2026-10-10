@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "normalized_cases.schema.json",
+  "title": "項目整理（AI提出）",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "regions",
+    "source_items",
+    "cases"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "regions": {
+      "description": "source_inventory.jsonの全領域の処遇。1件も漏らさない",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "region_id",
+          "role",
+          "disposition",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "region_id": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "test_table",
+              "test_block",
+              "heading",
+              "description",
+              "reference",
+              "data_definition",
+              "revision_history",
+              "legend",
+              "drawing",
+              "unreadable",
+              "other"
+            ]
+          },
+          "disposition": {
+            "enum": [
+              "parsed",
+              "not_test",
+              "unreadable",
+              "needs_question"
+            ]
+          },
+          "header_rows": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "question_ids": {
+            "$ref": "defs.schema.json#/$defs/id_list"
+          }
+        }
+      }
+    },
+    "source_items": {
+      "description": "原資料上のテスト項目（元の単位）",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "item_id",
+          "original_id",
+          "id_assigned",
+          "region_ids",
+          "refs",
+          "title",
+          "step_count",
+          "expected_count",
+          "data_pattern_count",
+          "disposition",
+          "duplicate_of",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "item_id": {
+            "$ref": "defs.schema.json#/$defs/id"
+          },
+          "original_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id_assigned": {
+            "type": "boolean",
+            "description": "原資料にIDが無く内部IDを付与した場合true"
+          },
+          "region_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "$ref": "defs.schema.json#/$defs/ref"
+            },
+            "minItems": 1
+          },
+          "title": {
+            "type": "string"
+          },
+          "step_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "expected_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "data_pattern_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "disposition": {
+            "enum": [
+              "mapped",
+              "merged_duplicate",
+              "excluded",
+              "needs_question"
+            ]
+          },
+          "duplicate_of": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "inheritance": {
+            "description": "結合セル・空欄から意味上の値を継承した場合の根拠",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ref",
+                "from_ref",
+                "reason"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "ref": {
+                  "$ref": "defs.schema.json#/$defs/ref"
+                },
+                "from_ref": {
+                  "$ref": "defs.schema.json#/$defs/ref"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "question_ids": {
+            "$ref": "defs.schema.json#/$defs/id_list"
+          }
+        }
+      }
+    },
+    "cases": {
+      "description": "見積もり単位に整理したケース",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "case_id",
+          "title",
+          "source_item_ids",
+          "relation",
+          "summary",
+          "steps",
+          "expected",
+          "step_count",
+          "assertion_count",
+          "data_pattern_count"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "case_id": {
+            "$ref": "defs.schema.json#/$defs/id"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_item_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "relation": {
+            "enum": [
+              "one_to_one",
+              "split",
+              "merged"
+            ]
+          },
+          "relation_reason": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "preconditions": {
+            "$ref": "defs.schema.json#/$defs/text_list"
+          },
+          "steps": {
+            "$ref": "defs.schema.json#/$defs/text_list"
+          },
+          "expected": {
+            "$ref": "defs.schema.json#/$defs/text_list"
+          },
+          "step_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "assertion_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "data_pattern_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "notes": {
+            "type": "string"
+          },
+          "question_ids": {
+            "$ref": "defs.schema.json#/$defs/id_list"
+          },
+          "source_item_query": {
+            "description": "item_groupsの項目を列の値で選ぶ（全条件AND）。結果は source_item_ids に追加される",
+            "type": "object",
+            "required": [
+              "group_ids"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "group_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              "where": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "column"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    },
+                    "equals": {
+                      "type": "string"
+                    },
+                    "contains": {
+                      "type": "string"
+                    },
+                    "regex": {
+                      "type": "string"
+                    }
+                  },
+                  "minProperties": 2,
+                  "maxProperties": 2
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "item_groups": {
+      "description": "大規模資料向け：行範囲で原項目を一括宣言する。スクリプトが source_items へ展開する",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "group_id",
+          "region_ids",
+          "workbook_id",
+          "sheet",
+          "first_row",
+          "last_row",
+          "rows_per_item",
+          "last_column",
+          "id_column",
+          "disposition",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "group_id": {
+            "$ref": "defs.schema.json#/$defs/id"
+          },
+          "region_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "workbook_id": {
+            "type": "string"
+          },
+          "sheet": {
+            "type": "string"
+          },
+          "first_row": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "最初の項目の先頭行（見出し行は含めない）"
+          },
+          "last_row": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "rows_per_item": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1項目が占める行数（複数行手順なら3など）"
+          },
+          "skip_rows": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "範囲内で項目でない行（中見出し・空行など）"
+          },
+          "first_column": {
+            "type": "string",
+            "description": "項目範囲の左端列（既定A）"
+          },
+          "last_column": {
+            "type": "string",
+            "description": "項目範囲の右端列"
+          },
+          "id_column": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "原IDの列。IDなしならnull"
+          },
+          "item_id_prefix": {
+            "type": "string",
+            "description": "id_column=null のときの内部ID接頭辞"
+          },
+          "title_column": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "step_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "expected_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "data_pattern_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "disposition": {
+            "enum": [
+              "mapped",
+              "excluded",
+              "needs_question"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "question_ids": {
+            "$ref": "defs.schema.json#/$defs/id_list"
+          }
+        }
+      }
+    }
+  }
+}

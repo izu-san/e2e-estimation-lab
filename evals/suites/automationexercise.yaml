@@ -1,0 +1,19 @@
+# 提供6形式の評価スイート。各ファイルは別案件として独立に実行する（1ファイル=1run）。
+# run を省略すると、入力ファイルのSHA-256が一致する最新runを使う。
+suite_id: automationexercise-v1
+runs:
+  - input: inputs/AutomationExercise_01_詳細形式.xlsx
+    expectation: evals/expectations/ae01_detail.yaml
+  - input: inputs/AutomationExercise_02_少数列_粗粒度.xlsx
+    expectation: evals/expectations/ae02_coarse.yaml
+  - input: inputs/AutomationExercise_03_横持ち形式.xlsx
+    expectation: evals/expectations/ae03_horizontal.yaml
+  - input: inputs/AutomationExercise_04_複数行_結合セル.xlsx
+    expectation: evals/expectations/ae04_multirow_merged.yaml
+  - input: inputs/AutomationExercise_05_IDなし_重複候補.xlsx
+    expectation: evals/expectations/ae05_noid_duplicate.yaml
+  - input: inputs/AutomationExercise_06_複数シート_説明混在.xlsx
+    expectation: evals/expectations/ae06_multisheet.yaml
+  # 本番想定の大規模項目書（.xlsm、8機能シート×300件、うち2シートは1ケース3行・結合セル）
+  - input: inputs/AutomationExercise_大規模テスト項目書_2400件.xlsm
+    expectation: evals/expectations/ae_large_2400.yaml

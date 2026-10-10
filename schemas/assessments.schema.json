@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "assessments.schema.json",
+  "title": "採点・種類別難易度（AI提出）。工数・総合難易度・合計は含めない（スクリプトが算出）",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "case_assessments",
+    "common_assessments"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "axis": {
+      "type": "object",
+      "required": [
+        "score",
+        "condition",
+        "evidence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "score": {
+          "enum": [
+            1,
+            2,
+            3,
+            null
+          ]
+        },
+        "condition": {
+          "type": "string",
+          "description": "適用した基準の条件（基準の文言・セル）"
+        },
+        "evidence": {
+          "type": "string",
+          "description": "原資料の根拠"
+        },
+        "standard_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "defs.schema.json#/$defs/std_ref"
+          }
+        },
+        "assumptions": {
+          "$ref": "defs.schema.json#/$defs/text_list"
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "case_assessments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "case_id",
+          "arch_ids",
+          "scope",
+          "scope_reason",
+          "feasibility",
+          "info_sufficient",
+          "axes",
+          "estimate_status",
+          "rationale"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "case_id": {
+            "type": "string"
+          },
+          "arch_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "scope": {
+            "$ref": "defs.schema.json#/$defs/scope"
+          },
+          "scope_reason": {
+            "type": "string"
+          },
+          "feasibility": {
+            "enum": [
+              "feasible",
+              "impossible_confirmed",
+              "unknown"
+            ]
+          },
+          "impossible_reason": {
+            "type": "string"
+          },
+          "info_sufficient": {
+            "type": "boolean",
+            "description": "主要情報が揃い方針を定められるか"
+          },
+          "axes": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^AX-[0-9]{2}$"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/axis"
+            }
+          },
+          "estimate_status": {
+            "$ref": "defs.schema.json#/$defs/estimate_status"
+          },
+          "conditions": {
+            "$ref": "defs.schema.json#/$defs/text_list"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "uses_components": {
+            "$ref": "defs.schema.json#/$defs/id_list"
+          },
+          "question_ids": {
+            "$ref": "defs.schema.json#/$defs/id_list"
+          }
+        }
+      }
+    },
+    "common_assessments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "component_id",
+          "difficulty",
+          "matched_conditions",
+          "rationale",
+          "estimate_status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "component_id": {
+            "type": "string"
+          },
+          "difficulty": {
+            "enum": [
+              "Low",
+              "Mid",
+              "High",
+              "Impossible",
+              null
+            ],
+            "description": "Impossibleは合意範囲で実現不可と確認済の場合のみ（工数null）"
+          },
+          "matched_conditions": {
+            "type": "string"
+          },
+          "standard_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "defs.schema.json#/$defs/std_ref"
+            }
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "estimate_status": {
+            "$ref": "defs.schema.json#/$defs/estimate_status"
+          },
+          "question_ids": {
+            "$ref": "defs.schema.json#/$defs/id_list"
+          },
+          "impossible_reason": {
+            "type": "string",
+            "description": "Impossibleの理由・根拠・解消条件・代替案"
+          },
+          "conditions": {
+            "$ref": "defs.schema.json#/$defs/text_list",
+            "description": "条件付きの仮定・影響・再見積条件"
+          }
+        }
+      }
+    }
+  }
+}

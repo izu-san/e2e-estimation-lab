@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+runs/*
+!runs/.gitkeep
+# 顧客資料・基準Excelはリポジトリに含めない（配置場所はREADME参照）
+inputs/*
+!inputs/.gitkeep
+!inputs/README.md
+standards/*
+!standards/.gitkeep
+!standards/README.md

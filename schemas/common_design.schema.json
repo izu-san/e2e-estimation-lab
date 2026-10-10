@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common_design.schema.json",
+  "title": "共通部分の設計（AI提出）",
+  "type": "object",
+  "required": ["schema_version", "architectures", "components"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "architectures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["arch_id", "name", "assumptions"],
+        "additionalProperties": false,
+        "properties": {
+          "arch_id": {"$ref": "defs.schema.json#/$defs/id"},
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "assumptions": {"$ref": "defs.schema.json#/$defs/text_list"}
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["component_id", "arch_ids", "type_id", "name", "responsibility", "need_reason", "implementation_kind", "elements", "used_by", "depends_on", "integrated_into", "cost_owner"],
+        "additionalProperties": false,
+        "properties": {
+          "component_id": {"$ref": "defs.schema.json#/$defs/id"},
+          "arch_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true},
+          "type_id": {"type": "string", "description": "共通基準の種別ID（BASE等）"},
+          "name": {"type": "string", "minLength": 1},
+          "responsibility": {"type": "string", "minLength": 1},
+          "need_reason": {"type": "string", "minLength": 1},
+          "unit_note": {"type": "string", "description": "基準の計上単位との対応の説明"},
+          "implementation_kind": {"enum": ["新規", "改修", "既存流用", "要確認", "対象外"]},
+          "change_responsibility": {"type": ["string", "null"], "description": "改修時の変更責務"},
+          "reuse_verified": {"type": "boolean", "description": "既存流用の適合性確認済みか"},
+          "reuse_integration_owner": {"type": ["string", "null"], "description": "既存流用の確認・組込み工数の計上先component_id"},
+          "elements": {"description": "数量に対応する構成要素ID。数量=要素数", "type": "array", "items": {"$ref": "defs.schema.json#/$defs/id"}, "minItems": 1, "uniqueItems": true},
+          "used_by": {"description": "利用ケースID", "$ref": "defs.schema.json#/$defs/id_list"},
+          "depends_on": {"description": "実装・実行上の依存先component_id", "$ref": "defs.schema.json#/$defs/id_list"},
+          "integrated_into": {"type": ["string", "null"], "description": "統合先component_id（説明上の統合）"},
+          "cost_owner": {"type": "string", "description": "工数の計上先component_id。自分自身なら自分で計上"},
+          "exclusion_reason": {"type": "string"},
+          "source_refs": {"type": "array", "items": {"$ref": "defs.schema.json#/$defs/ref"}},
+          "question_ids": {"$ref": "defs.schema.json#/$defs/id_list"}
+        }
+      }
+    }
+  }
+}

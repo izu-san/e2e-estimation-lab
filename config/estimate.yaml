@@ -1,0 +1,25 @@
+# 案件設定の雛形（本プロジェクト独自のYAML。Claude Code固有の設定キーではない）。
+# コピーして config/estimate.yaml などとして使う。パスはリポジトリルートからの相対パス。
+schema_version: 1
+standards:
+  cases: standards/Playwright_自動化工数標準設定_v0.1.xlsx
+  common: standards/Playwright_汎用共通部分工数基準_v0.1.xlsx
+  adapter: config/standards_adapter.yaml   # 基準Excelの読取りアダプター
+target:
+  automation_tool: playwright
+  language: typescript
+  browsers: [chromium]
+  environments: 1
+architecture:
+  pom: unspecified   # enabled / disabled / compare / unspecified
+  existing_assets: unknown
+scope:
+  excluded_type_ids: []   # 設定で明示的に対象外とする共通種別ID（例: [CI]）。対象外として記録される
+  notes: []
+uncertainty:
+  allow_explicit_assumptions: true
+  on_unresolved: continue_as_pending
+execution:
+  site_interaction: false     # 対象サイトへの操作は行わない（falseのみ許可）
+  max_repair_attempts: 2      # 機械検証エラーに対するAIの修正上限
+  chunk_rows: 80              # AI読解用ビューの分割行数

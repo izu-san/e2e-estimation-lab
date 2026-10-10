@@ -1,0 +1,105 @@
+# 基準Excel（管理された形式）の読取りアダプター。
+#
+# 顧客項目書とは異なり、基準Excelは「既知の構造」として明示的に読む。
+# 見出し文字列で表・ラベルを探し、見つからない・曖昧な場合はエラーにする（黙って誤読しない）。
+#
+# 実ファイル配置後に `scripts/estimator inspect-standards` を実行し、
+# 検出結果がおかしければ本ファイルの見出し候補(aliases)・シート名を調整する（開発モードで実施）。
+#
+# 見出しの照合規則: Unicode NFKC正規化・前後空白/改行除去・大小無視で完全一致。
+#   "re:" で始まる候補は正規表現（search）として扱う。
+adapter_version: 1
+
+cases:
+  # 基準版の取得方法。label: ラベルセルの右隣の値 / from_filename: ファイル名の正規表現
+  version:
+    labels: ["版", "バージョン", "基準版", "文書版", "version"]
+    from_filename: "_v(\\d+(?:\\.\\d+)*)"
+  supported_versions: ["0.1"]
+  difficulty_values: ["Low", "Mid", "High"]
+  effort_table:
+    # v0.1実ファイル: 工数標準!A1:D4（見出し「難易度／設定」「下限人時／値」「標準人時」「上限人時」）。
+    # 「判定例」シートにも同名に近い見出しがあるため、シートを限定する。
+    sheet_pattern: "^工数標準$"
+    columns:
+      difficulty: ["難易度", "総合難易度", "総合判定", "re:^難易度"]
+      low: ["下限", "re:^下限", "最小", "re:^最小"]
+      std: ["標準", "re:^標準", "基準値"]
+      high: ["上限", "re:^上限", "最大", "re:^最大"]
+    required_keys: ["Low", "Mid", "High"]
+  thresholds:
+    # ラベルセルを探し、同じ行の右側で最初の数値（数式は保存済み計算結果）を取得する。
+    # v0.1実ファイル: 工数標準!A8「Lowの合計点上限」→B8、工数標準!A9「Highの合計点下限」→B9
+    low_max:
+      labels: ["Low上限", "re:^Low.*合計点上限$", "re:Low.*上限", "re:Low.*以下"]
+    high_min:
+      labels: ["High閾値", "re:^High.*合計点下限$", "re:High.*閾値", "re:High.*以上"]
+  axes:
+    # v0.1実ファイル: 判定基準!A1:F6（各軸の1〜3点の条件はC〜E列）
+    sheet_pattern: "^判定基準$"
+    columns:
+      axis_id: ["軸ID", "ID", "re:^軸ID"]
+      name: ["判定軸", "軸名", "評価軸", "re:^判定軸"]
+    required_ids: ["AX-01", "AX-02", "AX-03", "AX-04", "AX-05"]
+  # 見積もり状態の規則（v0.1 総合判定 RULE-07）の判定に使う軸と点数。
+  # 「AX-04が2または3、または他の仮定があれば条件付き」。規則の文章が変わったら見直す。
+  status_rule:
+    ambiguity_axis: AX-04
+    conditional_min_score: 2
+    rule_ref: 総合判定!C8 (RULE-07)
+  # 「判定例」シート。総合判定ロジックの回帰テスト（tests/test_standards.py）にだけ使う。
+  example:
+    sheet_pattern: "^判定例$"
+    columns:
+      example_id: ["例ID"]
+      feasibility: ["実現可否"]
+      assumption: ["仮定"]
+      ax01: ["操作"]
+      ax02: ["確認"]
+      ax03: ["手段"]
+      ax04: ["曖昧"]
+      ax05: ["データ"]
+      status: ["見積状態"]
+      difficulty: ["難易度"]
+      low: ["下限人時"]
+      std: ["標準人時"]
+      high: ["上限人時"]
+  # 読み込み用ダイジェスト（standards_text/cases.digest.md）で省くシート。判定例シートは自動で省く。
+  digest_exclude_sheets: ["^AI出力仕様$"]
+  # 基準の文章（非数値セル）のフィンガープリント。ルール版の確認後に記入する。
+  # null: 未承認として警告。値あり＋不一致: エラー（文章変更時はルール実装の確認が必要）。
+  approved_text_fingerprint: dd3150fcd98a4a8c5f7cfdb2a3662d397b718618f825cccef4afa8fbb6894b0a
+
+common:
+  version:
+    labels: ["版", "バージョン", "基準版", "文書版", "version"]
+    from_filename: "_v(\\d+(?:\\.\\d+)*)"
+  supported_versions: ["0.1"]
+  difficulty_values: ["Low", "Mid", "High"]
+  known_type_ids: [BASE, AUTH, FIX, DATA, PAGE, COMP, FLOW, UTIL, EXT, RUN, CI, REPORT, DOC, POC]
+  effort_table:
+    # v0.1実ファイル: 工数表!A1:H43（参照キー・種別ID・種別・難易度・単位・下限人時・標準人時・上限人時）
+    sheet_pattern: "^工数表$"
+    columns:
+      type_id: ["種別ID", "種類ID", "re:^種別ID", "re:^種類ID"]
+      difficulty: ["難易度", "re:^難易度"]
+      unit: ["単位", "計上単位", "re:単位"]
+      low: ["下限", "re:^下限", "最小"]
+      std: ["標準", "re:^標準"]
+      high: ["上限", "re:^上限", "最大"]
+    # キー列（種別ID|難易度）として既に結合済みの列がある場合の候補。あれば照合に使う。
+    optional_columns:
+      key: ["参照キー", "工数キー", "キー", "re:^工数キー"]
+  # 「判定集計例」シート。回帰テスト（算定済み小計の再計算）にだけ使う。本番計算には使わない。
+  # v0.1実ファイル: 判定集計例!A1:P13（集計は B17:B19 = N/O/P列 2〜13行の合計）
+  example:
+    sheet_pattern: "^判定集計例$"
+    columns:
+      type_id: ["種別ID", "種類ID", "re:^種別ID", "re:^種類ID"]
+      difficulty: ["難易度", "re:^難易度"]
+      quantity: ["数量", "re:^数量", "個数"]
+    optional_columns:
+      status: ["見積状態", "状態", "算定状態"]
+      kind: ["実装区分"]
+  digest_exclude_sheets: ["^AI出力仕様$"]
+  approved_text_fingerprint: e440b7241a431f85a54a05ccbdf895fefe729674505c232613abe18910fcb599

@@ -1,0 +1,81 @@
+{
+  "$comment": "見積もりモード用の権限設定テンプレート（OS非依存: 権限ルール＋Hook）。直接使わず scripts/make_session_settings.py でrunごとに生成する。{ROOT}=リポジトリ絶対パス, {RUN_DIR}=現在のrun絶対パス, {SESSIONS_DIR}=生成設定の置き場。Bashは scripts/estimator のみ許可（dontAskのため他は拒否）。OSサンドボックスは config/claude-estimate.sandbox.json（--sandbox で追加）。",
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "disableBypassPermissionsMode": "disable",
+    "allow": [
+      "Read(/{ROOT}/**)",
+      "Edit(/{RUN_DIR}/**)",
+      "Bash({ROOT}/scripts/estimator *)",
+      "Bash(scripts/estimator *)",
+      "Skill(estimate-e2e)",
+      "Agent(estimate-reviewer)"
+    ],
+    "deny": [
+      "Edit(/{ROOT}/inputs/**)",
+      "Edit(/{ROOT}/standards/**)",
+      "Edit(/{ROOT}/src/**)",
+      "Edit(/{ROOT}/scripts/**)",
+      "Edit(/{ROOT}/schemas/**)",
+      "Edit(/{ROOT}/config/**)",
+      "Edit(/{ROOT}/.claude/**)",
+      "Edit(/{ROOT}/CLAUDE.md)",
+      "Edit(/{ROOT}/evals/**)",
+      "Edit(/{ROOT}/tests/**)",
+      "Edit(/{ROOT}/docs/**)",
+      "Edit(/{ROOT}/.venv/**)",
+      "Edit(/{ROOT}/pyproject.toml)",
+      "Edit(/{ROOT}/uv.lock)",
+      "Edit(/{SESSIONS_DIR}/**)",
+      "Agent(general-purpose)",
+      "Agent(Explore)",
+      "Agent(Plan)",
+      "Agent(claude)",
+      "Agent(claude-code-guide)",
+      "Agent(statusline-setup)",
+      "Agent(fork)",
+      "WebFetch",
+      "WebSearch"
+    ]
+  },
+  "env": {
+    "ESTIMATOR_MODE": "estimate",
+    "ESTIMATOR_RUN_DIR": "{RUN_DIR}",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPYCACHEPREFIX": "{RUN_DIR}/.cache/pycache"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{ROOT}/.venv/bin/python -B {ROOT}/scripts/hooks/pre_tool_guard.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{ROOT}/.venv/bin/python -B {ROOT}/scripts/hooks/post_tool_validate.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{ROOT}/.venv/bin/python -B {ROOT}/scripts/hooks/stop_check.py"
+          }
+        ]
+      }
+    ]
+  }
+}

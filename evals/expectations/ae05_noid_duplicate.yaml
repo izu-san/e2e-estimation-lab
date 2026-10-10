@@ -1,0 +1,9 @@
+# 評価用の期待事項。実行時AIの出力から作らないこと（AIが提案した候補は review_status: unreviewed）。
+# review_status: from_guide = 実装指示書の記載のみに基づく / human_reviewed = 評価担当者が資料を見て確認済み
+review_status: from_guide
+description: IDなし、20項目相当＋重複候補1行（重複候補を捨てずに根拠と処遇を残す）
+expect:
+  source_items: {min: 21, max: 21}
+  ids_assigned: {min: 21}
+  duplicates_recorded: {min: 1}
+  machine_validation: passed
