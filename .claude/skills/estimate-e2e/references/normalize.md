@@ -79,3 +79,8 @@
 ## 判定例（EX-xx）を根拠にするとき
 `cases.digest.md` / `common.digest.md` は判定例シートを省いている。EX-xx を `relation_reason` や `evidence` に書く前に、
 全文の `cases.md` / `common.md` で該当行を開き、点数・状態・コメントを確認する。読まずにIDだけを引用しない。
+
+## relation の使い分け（補足）
+- `one_to_one`: 1項目＝1ケース。データパターンが複数でも1項目内なら `data_pattern_count` で表す。
+- `split`: 1項目を複数ケースへ。`merged`: **複数の項目**を1ケースへ（`source_item_ids` が2件以上必須）。
+- `split` で要確認部分を切り出したときは、親項目に要確認が残ること（`summary.md` の原項目→ケース件数に表れる）を最終報告にも書く。

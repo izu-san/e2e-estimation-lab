@@ -32,3 +32,13 @@
 | STEP_COUNT_MISMATCH（警告） | 親項目と分解先ケースの `step_count` の数え方を揃える。意図して違う場合は `relation_reason` に理由を書く |
 | QUESTION_NOT_LINKED / QUESTION_TARGET_MISSING（警告） | 質問の `targets` と、ケース・共通作業の `question_ids` を双方向でそろえる。同じ前提に依存する他のケースの漏れも探す |
 | EVIDENCE_REF_NO_SHEET（警告） | evidence のセル座標は `シート名!セル`（例: `確認リスト!C3`）。`views/*.md` で実際の座標を確認する。列Aが「No.」の場合、手順・期待結果は別の列にある |
+
+## 基準への接地チェック（2026-10 追加）
+| code | 対応 |
+|---|---|
+| UNSOURCED_NUMBER | rationale・condition・conditions・責務の説明から工数/割合/合計点の数値を消す（エラー）。evidence内の原文引用は警告。数値は `calculate` が基準Excelから算出する |
+| NO_STANDARD_REF（警告） | 点数に `cases:判定基準!…` 等の基準セル参照を付ける。基準に当てはまる条件が無ければ点数を決めず質問に残す |
+| SPECULATIVE_EVIDENCE（警告） | 要確認ケースの根拠から推測表現をなくす。決められない軸はnull |
+| POM_ASSUMPTION_NOT_CONDITIONAL（警告） | POM未指定でPOM採用案を作るなら、PAGE作業を条件付きにして仮定・再見積条件を書く（共通基準 COMMON-OUT-01） |
+| QUESTION_NOT_INHERITED（警告） | 依存先の部品が未解決の質問を持つのに、ケースが確定可能。conditionsとquestion_idsに影響を残す |
+| EVIDENCE_COMPONENT_NOT_USED（警告） | 根拠が言及する部品を `uses_components`/`used_by` に入れるか、言及を直接/経由で揃える |

@@ -83,3 +83,11 @@
   {"target": "C-007", "related": ["C-008"], "kind": "over_split", "message": "…", "suggestion": "…"}
 ]}
 ```
+
+## ケース（cases）の全フィールドの注意
+- `preconditions` / `steps` / `expected` は**文字列の配列**（1件でも `["…"]`）。文字列を直接入れるとSCHEMAエラー。
+- 1項目に複数データパターンがあるだけなら `one_to_one` + `data_pattern_count`。`merged` は複数の `source_item_ids` のときだけ。
+
+## 質問IDの双方向リンクは機械的に付ける
+質問の `targets` とケース・共通作業の `question_ids` は同じ集合にする。数が多いときは、生成スクリプトで
+`targets` から `question_ids` を（またはその逆を）一括で組み立てると漏れない。案件全体の仮定は `targets` に構成案IDを入れる。

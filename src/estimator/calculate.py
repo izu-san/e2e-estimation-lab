@@ -111,6 +111,7 @@ def calc_component(comp: dict, ca: dict | None, std_common: dict, excluded_types
         return row
     if comp["cost_owner"] != comp["component_id"]:
         row["category"] = "counted_elsewhere"
+        row["estimate_status"] = "他へ計上"  # 判定なし=情報不足、と誤読されないようにする
         row["notes"].append(f"工数は {comp['cost_owner']} に計上")
         return row
     if kind == "要確認":

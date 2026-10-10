@@ -180,3 +180,20 @@ def _digest_check(stdmod, digest_exclude_patterns, standards_text):
     assert "判定例" in full and "AI出力仕様" in full and "ダイジェスト" not in full
     assert "シート: 判定基準" in digest and "シート: 判定例" not in digest and "シート: AI出力仕様" not in digest
     assert "判定例, AI出力仕様" in digest  # 省いたシート名を明記する
+
+
+def test_example_sheet_formula_cache_warnings_are_summarized():
+    """判定例シートの数式キャッシュなしは1行にまとめ、他シートの警告は個別に残す。"""
+    from estimator.standards import _read_warnings
+
+    wb = {"warnings": [
+        {"code": "FORMULA_NO_CACHE", "ref": "判定例!K9"},
+        {"code": "FORMULA_NO_CACHE", "ref": "判定例!M9"},
+        {"code": "FORMULA_NO_CACHE", "ref": "工数標準!B3"},
+        {"code": "HIDDEN_SHEET", "ref": "メモ"},
+    ]}
+    got = _read_warnings(wb, {"example": {"sheet_pattern": "^判定例$"}})
+    assert "読取警告 FORMULA_NO_CACHE 工数標準!B3" in got and "読取警告 HIDDEN_SHEET メモ" in got
+    summary = [w for w in got if "FORMULA_NO_CACHE_EXAMPLE" in w]
+    assert len(summary) == 1 and "2件" in summary[0]
+    assert not any("判定例!K9" in w and "FORMULA_NO_CACHE " in w for w in got)

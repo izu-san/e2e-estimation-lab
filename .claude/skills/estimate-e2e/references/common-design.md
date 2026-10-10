@@ -40,3 +40,7 @@
 `used_by` は、採点工程の `uses_components` と同じ集合にする。全ケースが使う部品（BASE・RUN など）も `used_by` に全ケースを並べ、
 各ケースの `uses_components` にも入れる。要確認ケースも、前提にする部品を両方に書く。
 PAGE は `responsibility` に挙げた画面と `elements` を一致させる（挙げた画面が要素に無い、または逆、を作らない）。
+
+## 削除・解放の所有者を1文で書く（DATA と FIX）
+専用ユーザー等の削除は「**削除の実処理は DATA、呼出し順序・スコープ・失敗時の解放保証は FIX**」と `responsibility` に明記する。
+FIX が AUTH に `depends_on` を持つ場合は、その理由（例: 認証状態を fixture で束ねるため。認証本体の実装は AUTH）を `need_reason` に書く。

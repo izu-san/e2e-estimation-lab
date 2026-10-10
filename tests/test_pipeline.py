@@ -356,3 +356,70 @@ def test_step_count_mismatch_between_parent_and_children_warns(run, capsys):
     write_json(rd / "ai/normalized_cases.json", n)
     code, errors, warns = _stage(capsys, "normalize")
     assert code == 0 and "STEP_COUNT_MISMATCH" in warns
+
+
+def test_grounding_warnings(run, capsys):
+    """基準セル参照なし・推測表現・依存先の質問の引継ぎ漏れ・根拠中の未使用部品は警告（エラーにはしない）。"""
+    rd, _ = run
+    a = assessments()
+    # C-001: 確定可能のまま、依存先PAGE-1が未解決質問に紐づく。根拠にBASE-1以外の未使用部品も書く
+    a["common_assessments"][1]["question_ids"] = ["Q1"]
+    a["case_assessments"][0]["axes"]["AX-01"]["evidence"] = "OTHER-1 を使う"
+    # C-002: 要確認のケースで推測表現
+    a["case_assessments"][1]["axes"]["AX-01"]["evidence"] = "単一操作と想定"
+    d = design()
+    d["components"].append({**d["components"][0], "component_id": "OTHER-1", "type_id": "UTIL", "name": "補助",
+                            "elements": ["U1"], "cost_owner": "OTHER-1", "used_by": []})
+    q = questions()
+    q["items"][0]["targets"] = ["C-002", "PAGE-1"]
+    write_json(rd / "ai/assessments.json", a)
+    write_json(rd / "ai/common_design.json", d)
+    write_json(rd / "ai/questions.json", q)
+    code, errors, warns = _stage(capsys, "assessments")
+    assert code == 0 and not errors
+    assert {"NO_STANDARD_REF", "SPECULATIVE_EVIDENCE", "QUESTION_NOT_INHERITED",
+            "EVIDENCE_COMPONENT_NOT_USED"} <= warns
+
+
+def test_invented_numbers_are_rejected(run, capsys):
+    """AIが判断文に工数・割合・合計点を書くとエラー（根拠evidenceの引用は警告）。"""
+    rd, _ = run
+    a = assessments()
+    a["case_assessments"][0]["rationale"] = "標準16人時が妥当。共通化で30%割引"
+    a["common_assessments"][0]["rationale"] = "合計8点のためHigh"
+    a["case_assessments"][0]["axes"]["AX-02"]["evidence"] = "原文に「3時間以内」とある"
+    write_json(rd / "ai/assessments.json", a)
+    code, out = run_cli(capsys, "validate-stage", "--run", "t1", "--stage", "assessments")
+    assert code == 1
+    paths = {e["path"] for e in out["errors"] if e["code"] == "UNSOURCED_NUMBER"}
+    assert any(p.endswith("/rationale") for p in paths) and len(paths) >= 2
+    assert any(w["code"] == "UNSOURCED_NUMBER" and w["path"].endswith("/evidence") for w in out["warnings"])
+
+
+def test_integrated_component_is_not_pending(run, capsys):
+    """他の作業へ統合して計上した部品は『他へ計上』と表示し、要確認と誤読させない。"""
+    rd, _ = run
+    d = design()
+    d["components"][1]["integrated_into"] = "BASE-1"
+    d["components"][1]["cost_owner"] = "BASE-1"
+    a = assessments()
+    a["common_assessments"] = a["common_assessments"][:1]
+    write_json(rd / "ai/common_design.json", d)
+    write_json(rd / "ai/assessments.json", a)
+    code, out = run_cli(capsys, "calculate", "--run", "t1")
+    assert code == 0, out
+    import json as _j
+    est = _j.loads((rd / "estimate.json").read_text(encoding="utf-8"))
+    row = next(r for r in est["architectures"][0]["components"] if r["component_id"] == "PAGE-1")
+    assert row["category"] == "counted_elsewhere" and row["estimate_status"] == "他へ計上"
+
+
+def test_summary_mapping_line_shows_split_and_merged():
+    """summary.md に原項目→ケース件数と、分解・統合を示す。"""
+    from estimator.export import _mapping_lines
+    norm = {"source_items": [{"item_id": "A"}, {"item_id": "B"}, {"item_id": "C"}],
+            "cases": [{"case_id": "C-1", "source_item_ids": ["A"]}, {"case_id": "C-2", "source_item_ids": ["A"]},
+                      {"case_id": "C-3", "source_item_ids": ["B", "C"]}]}
+    (line,) = _mapping_lines(norm)
+    assert "原項目 3件 → 見積もりケース 3件" in line and "A" in line and "C-3" in line
+    assert _mapping_lines(None) == []

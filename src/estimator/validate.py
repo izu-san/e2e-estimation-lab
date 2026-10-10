@@ -349,6 +349,8 @@ def validate_assessments(rd: Path) -> list[dict]:
     errs += _usage_consistency(data, design)
     errs += _question_links(data, design, norm, rd)
     errs += _bare_evidence_refs(data)
+    errs += _grounding_checks(data, design, rd)
+    errs += _invented_numbers(data, design)
     for cid in sorted(case_ids):
         for arch in sorted(arch_ids):
             if (cid, arch) not in seen:
@@ -433,6 +435,98 @@ def _question_links(data: dict, design: dict, norm: dict, rd: Path) -> list[dict
             if q and tid not in q["targets"]:
                 errs.append(E("QUESTION_TARGET_MISSING", f"{tid}",
                               f"{tid} は {qid} を参照していますが、{qid} の targets に {tid} がありません", "warning"))
+    return errs
+
+
+_ID_TOKEN = re.compile(r"(?<![A-Za-z0-9-])[A-Z]{2,6}-\d{1,4}(?![A-Za-z0-9])")
+_SPECULATION = re.compile(r"想定|推測|と思われ|だろう|と考えられ")
+# 工数・割合を表す数値。基準Excelの値の転記・独自の相場・割引率をAIが書くのを検出する
+_EFFORT_NUMBER = re.compile(r"\d+(?:\.\d+)?\s*(?:人時|人日|人月|時間|分|hrs?|h(?![A-Za-z])|[%％]|割|倍)")
+_SUM_NUMBER = re.compile(r"(?:合計|総計|計)\s*\d+(?:\.\d+)?\s*点")
+
+
+def _grounding_checks(data: dict, design: dict, rd: Path) -> list[dict]:
+    """基準・仮定への接地を確認する（警告）。点数の根拠セル、依存先の質問の引継ぎ、根拠中の部品参照、
+    要確認ケースでの推測、POM未指定時のPAGEの状態。"""
+    errs: list[dict] = []
+    comps = {c["component_id"]: c for c in design["components"]}
+    arch_ids = {a["arch_id"] for a in design["architectures"]}
+    qs, _ = _load(rd, "ai/questions.json")
+    qmap = {q["question_id"]: q for q in (qs or {"items": []})["items"]}
+    comp_q = {ca["component_id"]: set(ca.get("question_ids", [])) for ca in data["common_assessments"]}
+    # 全ケースが使う部品（BASE・RUN等）の仮定は案件全体の前提で、ケースごとの引継ぎ対象にしない
+    all_cases = {a["case_id"] for a in data["case_assessments"]}
+    global_comps = {cid for cid, c in comps.items() if all_cases and all_cases <= set(c["used_by"])}
+    for n, a in enumerate(data["case_assessments"]):
+        p = f"case_assessments/{n}({a['case_id']})"
+        uses = set(a.get("uses_components", []))
+        undetermined = a["estimate_status"] == "要確認" or not a["info_sufficient"]
+        for ax, v in a["axes"].items():
+            if v["score"] is not None and not v.get("standard_refs"):
+                errs.append(E("NO_STANDARD_REF", f"{p}/axes/{ax}",
+                              "点数には基準Excelのセル参照 standard_refs（cases:判定基準!…）が必要です。基準にない条件を独自に作らないでください",
+                              "warning"))
+            if undetermined and v["score"] is not None and _SPECULATION.search(v["evidence"]):
+                errs.append(E("SPECULATIVE_EVIDENCE", f"{p}/axes/{ax}",
+                              "要確認のケースの根拠に推測表現があります。原資料にない操作を補わず、決められない軸は null にしてください",
+                              "warning"))
+            for tok in sorted(set(_ID_TOKEN.findall(v["evidence"] + " " + v["condition"]))):
+                c = comps.get(tok)
+                if c and tok not in uses and c.get("integrated_into") not in uses:
+                    errs.append(E("EVIDENCE_COMPONENT_NOT_USED", f"{p}/axes/{ax}",
+                                  f"根拠が {tok} に言及していますが uses_components にありません。依存の持ち方（直接か他部品経由か）を揃えてください",
+                                  "warning"))
+        if a["estimate_status"] == "確定可能":
+            for u in sorted(uses - global_comps):
+                for qid in sorted(comp_q.get(u, set()) - set(a.get("question_ids", []))):
+                    q = qmap.get(qid)
+                    if q and q["status"] != "resolved" and not (set(q["targets"]) & arch_ids):
+                        errs.append(E("QUESTION_NOT_INHERITED", p,
+                                      f"{u} は未解決の {qid} に依存しますが、このケースは確定可能で question_ids に {qid} がありません。"
+                                      "前提の仮定が崩れたときの影響を conditions と question_ids に残してください", "warning"))
+    try:
+        pom = read_json(rd / "manifest.json").get("config_resolved", {}).get("architecture", {}).get("pom")
+    except (OSError, ValueError):
+        pom = None
+    if pom == "unspecified":
+        for ca in data["common_assessments"]:
+            c = comps.get(ca["component_id"])
+            if c and c["type_id"] == "PAGE" and c["implementation_kind"] in ("新規", "改修") \
+                    and ca["estimate_status"] == "確定可能":
+                errs.append(E("POM_ASSUMPTION_NOT_CONDITIONAL", f"common_assessments/{ca['component_id']}",
+                              "案件設定のPOMが未指定でPOM採用案を作っています。PAGE作業は条件付きにして仮定を記録してください"
+                              "（共通基準 AI出力仕様 COMMON-OUT-01）", "warning"))
+    return errs
+
+
+def _invented_numbers(data: dict, design: dict) -> list[dict]:
+    """AIが書いた判断文に工数・割合・合計点などの数値があれば検出する。
+    工数・難易度・合計は基準Excelに基づきCLIが算出する。AIが数字を書き写したり創作したりしない。"""
+    errs: list[dict] = []
+
+    def scan(path: str, text: str, severity: str) -> None:
+        for m in list(_EFFORT_NUMBER.finditer(text)) + list(_SUM_NUMBER.finditer(text)):
+            errs.append(E("UNSOURCED_NUMBER", path,
+                          f"『{m.group(0)}』は工数・割合・合計を表す数値です。基準Excelの値の転記や独自の数値をAIが書かず、"
+                          "算出は calculate に任せてください（原資料の引用なら evidence に原文位置を添えてください）", severity))
+
+    for n, a in enumerate(data["case_assessments"]):
+        p = f"case_assessments/{n}({a['case_id']})"
+        scan(f"{p}/rationale", a["rationale"], "error")
+        for i, c in enumerate(a.get("conditions", [])):
+            scan(f"{p}/conditions/{i}", c, "error")
+        for ax, v in a["axes"].items():
+            scan(f"{p}/axes/{ax}/evidence", v["evidence"], "warning")
+            scan(f"{p}/axes/{ax}/condition", v["condition"], "error")
+    for n, ca in enumerate(data["common_assessments"]):
+        p = f"common_assessments/{n}({ca['component_id']})"
+        scan(f"{p}/rationale", ca["rationale"], "error")
+        scan(f"{p}/matched_conditions", ca["matched_conditions"], "error")
+        for i, c in enumerate(ca.get("conditions", [])):
+            scan(f"{p}/conditions/{i}", c, "error")
+    for c in design["components"]:
+        for k in ("responsibility", "need_reason", "unit_note"):
+            scan(f"common_design/{c['component_id']}/{k}", c.get(k) or "", "error")
     return errs
 
 

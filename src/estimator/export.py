@@ -238,7 +238,7 @@ def export(rd: Path) -> dict:
     ws.column_dimensions["B"].width = 120
 
     atomic_save_workbook(wb, rd / "estimate.xlsx")
-    write_text(rd / "summary.md", render_summary(man, est, val, questions, conds))
+    write_text(rd / "summary.md", render_summary(man, est, val, questions, conds, norm))
     return {"xlsx": str(rd / "estimate.xlsx"), "summary": str(rd / "summary.md")}
 
 
@@ -256,13 +256,35 @@ def _warning_lines(val: dict) -> list[str]:
            [f"  - {w['stage']} / {w['kind']}: {w['count']}件（例 {w['sample'][:60]}）" for w in ws]
 
 
-def render_summary(man: dict, est: dict, val: dict, questions: list[dict], conds: list[dict]) -> str:
+def _mapping_lines(norm: dict | None) -> list[str]:
+    """原項目と見積もりケースの対応件数。分解・統合で件数が変わったことを読み手に示す。"""
+    if not norm:
+        return []
+    items = norm.get("source_items", [])
+    cases = norm.get("cases", [])
+    per_item: dict[str, int] = {}
+    for c in cases:
+        for sid in c.get("source_item_ids", []):
+            per_item[sid] = per_item.get(sid, 0) + 1
+    split = sorted(i for i, n in per_item.items() if n > 1)
+    merged = sorted(c["case_id"] for c in cases if len(c.get("source_item_ids", [])) > 1)
+    line = f"- 原項目 {len(items)}件 → 見積もりケース {len(cases)}件"
+    if split:
+        line += f"（分解された原項目: {', '.join(split)}）"
+    if merged:
+        line += f"（統合されたケース: {', '.join(merged)}）"
+    return [line]
+
+
+def render_summary(man: dict, est: dict, val: dict, questions: list[dict], conds: list[dict],
+                   norm: dict | None = None) -> str:
     st = val["status"]
     out = [f"# 見積もり結果 {man['run_id']}", "",
            f"- 入力: {', '.join(i['file_name'] for i in man['inputs'])}",
            f"- execution_status: {st['execution_status']} / 機械検証: {st['machine_validation']} "
            f"(エラー{val['machine']['error_count']}件, 警告{val['machine']['warning_count']}件)",
            f"- semantic_review_status: {st['semantic_review_status']}",
+           *_mapping_lines(norm),
            *_warning_lines(val),
            f"- 基準: 個別 {man['standards']['cases'].get('version')} / 共通 {man['standards']['common'].get('version')}",
            "", f"> {est['note']}", ""]

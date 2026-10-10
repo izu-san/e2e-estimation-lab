@@ -239,6 +239,25 @@ def _approval(fp: str, approved: str | None, warnings: list[str], errors: list[s
     return "approved"
 
 
+def _read_warnings(wb: dict, spec: dict) -> list[str]:
+    """読取り時の警告を文字列にする。回帰テスト用の判定例シートの数式キャッシュなしは1行にまとめる
+    （本番の計算・判定に使わないため。それ以外のシートの警告は個別に残す）。"""
+    pat = (spec.get("example") or {}).get("sheet_pattern")
+    out: list[str] = []
+    example_cells: list[str] = []
+    for w in wb["warnings"]:
+        sheet = w["ref"].split("!", 1)[0]
+        if w["code"] == "FORMULA_NO_CACHE" and pat and re.search(pat, sheet):
+            example_cells.append(w["ref"])
+        else:
+            out.append(f"読取警告 {w['code']} {w['ref']}")
+    if example_cells:
+        sheets = sorted({r.split("!", 1)[0] for r in example_cells})
+        out.append(f"読取警告 FORMULA_NO_CACHE_EXAMPLE {'・'.join(sheets)} の数式 {len(example_cells)}件に保存済み計算結果がありません"
+                   "（回帰テスト用の説明シートで、見積もりの計算・判定には使いません。例: " + example_cells[0] + "）")
+    return out
+
+
 def load_cases_standard(path: Path, spec: dict) -> dict:
     wb = read_workbook(path, "STD-CASES")
     errors: list[str] = []
@@ -328,7 +347,7 @@ def load_cases_standard(path: Path, spec: dict) -> dict:
         "status_rule": spec.get("status_rule"),
         "example": example,
         "text_fingerprint": fp, "text_approval": approval,
-        "errors": errors, "warnings": warnings + [f"読取警告 {w['code']} {w['ref']}" for w in wb["warnings"]],
+        "errors": errors, "warnings": warnings + _read_warnings(wb, spec),
         "_workbook": wb,
     }
 
@@ -406,7 +425,7 @@ def load_common_standard(path: Path, spec: dict) -> dict:
         "effort_table_location": f"{hit['sheet']['name']}!R{hit['header_row']}",
         "example": example,
         "text_fingerprint": fp, "text_approval": approval,
-        "errors": errors, "warnings": warnings + [f"読取警告 {w['code']} {w['ref']}" for w in wb["warnings"]],
+        "errors": errors, "warnings": warnings + _read_warnings(wb, spec),
         "_workbook": wb,
     }
 
