@@ -202,3 +202,40 @@ def test_consistency_across_formats_and_reused_runs(run, capsys, tmp_path):
     assert [t["reused_ai_outputs_from"] for t in first["runs"]] == [None, "t1"]
     assert first["independent_runs"] == 1
     assert evaluate_consistency({"name": "g", "inputs": [str(cust), str(cust2)]})["status"] == "report_only"
+
+
+def test_ax01_screen_rule(run, capsys):
+    """操作した画面の数・要因から AX-01 の期待点を求めて照合する（個別基準 COST-13 の仮ルール）。"""
+    rd, _ = run
+    a = assessments()
+    ax = a["case_assessments"][0]["axes"]["AX-01"]  # C-001: AX-01=2
+    assert "AX01_NO_SCREENS" in _stage(capsys, "assessments")[2]
+    ax["operation_screens"] = ["PG-List"]
+    write_json(rd / "ai/assessments.json", a)
+    assert "AX01_SCREEN_RULE" in _stage(capsys, "assessments")[2]  # 1画面なら1点
+    ax["factors"] = ["dialog"]
+    write_json(rd / "ai/assessments.json", a)
+    assert "AX01_SCREEN_RULE" not in _stage(capsys, "assessments")[2]  # ダイアログがあれば2点
+    del ax["factors"]
+    ax["operation_screens"] = ["PG-List", "PG-Cart"]
+    write_json(rd / "ai/assessments.json", a)
+    warns = _stage(capsys, "assessments")[2]
+    assert "AX01_SCREEN_RULE" not in warns and "SCREEN_NOT_IN_PAGE" in warns  # PG-Cart はPAGEの構成要素に無い
+
+
+def test_component_rules(run, capsys):
+    """必須の種別（RUN）と、FLOW・COMP の最小利用数（共通基準 BOUND-16〜18 の仮ルール）。"""
+    rd, _ = run
+    d = design()
+    base = d["components"][0]
+    d["components"].append({**base, "component_id": "FLOW-1", "type_id": "FLOW", "name": "業務フロー",
+                            "elements": ["FLOW"], "cost_owner": "FLOW-1", "used_by": ["C-001"], "depends_on": ["PAGE-1"]})
+    write_json(rd / "ai/common_design.json", d)
+    code, errors, warns = _stage(capsys, "common_design")
+    assert code == 0 and {"REQUIRED_COMPONENT_MISSING", "COMPONENT_SINGLE_USE"} <= warns
+    d["components"][-1]["used_by"] = ["C-001", "C-002"]
+    d["components"].append({**base, "component_id": "RUN-1", "type_id": "RUN", "name": "全体実行",
+                            "elements": ["RUN"], "cost_owner": "RUN-1"})
+    write_json(rd / "ai/common_design.json", d)
+    warns = _stage(capsys, "common_design")[2]
+    assert not {"REQUIRED_COMPONENT_MISSING", "COMPONENT_SINGLE_USE"} & warns

@@ -54,3 +54,8 @@
 | PENDING_SPLIT_CASE（警告） | 分解したケースの一部だけが要確認。仕様未提示の部分を切り出しただけなら、ケースをやめて原項目の `pending_parts` に保留する |
 | AXIS_COMPONENT_OVERLAP（警告） | DATA/FIX を使うケースの AX-05、FLOW を使うケースの AX-01 が2点以上。部品の作業を除いて残るケース固有の作業を軸の `overlap_note` に書くか、点数を見直す |
 | PREMISE_ROW_UNTRACED（警告） | 資料情報・前提の行が質問にも premise_reviews にもない。前提・未確定事項なら質問/仮定にして `refs` に行を入れ、影響がなければ `premise_reviews` に理由を書く |
+| AX01_NO_SCREENS（警告） | AX-01 に `operation_screens`（ケースが自分で操作した画面。PAGE の elements と同じID）を書く（個別基準 COST-13） |
+| AX01_SCREEN_RULE（警告） | 操作した画面が2つ以上か、`factors`（branch/dialog/file）があれば2点、それ以外は1点。判定だけの遷移先と共通部品に委ねた操作は数えない |
+| SCREEN_NOT_IN_PAGE（警告） | `operation_screens` の画面名を PAGE の `elements` と揃える（共通基準 BOUND-15） |
+| REQUIRED_COMPONENT_MISSING（警告） | 構成案に BASE・RUN を立てる。要件が不明なら仮定を置き質問に残す（BOUND-18） |
+| COMPONENT_SINGLE_USE（警告） | FLOW・COMP は2件以上が使うものだけ（BOUND-16・17）。1ケースだけならケースや PAGE に含める |

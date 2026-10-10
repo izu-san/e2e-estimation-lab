@@ -47,6 +47,25 @@
         "overlap_note": {
           "type": "string",
           "description": "使う共通部品（DATA・FIX・FLOW等）が所有する作業と重ならない、ケース固有に残る作業。部品と同じ作業を軸で再加点しない"
+        },
+        "operation_screens": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "操作手順の軸で、ケースが自分で操作を行う画面（PAGEの構成要素ID）。判定だけの遷移先と、FLOW・AUTH・DATAに委ねた操作は含めない"
+        },
+        "factors": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "branch",
+              "dialog",
+              "file"
+            ]
+          },
+          "uniqueItems": true,
+          "description": "操作手順の軸で2点の要因になる条件分岐・ダイアログ・ファイル操作"
         }
       }
     }

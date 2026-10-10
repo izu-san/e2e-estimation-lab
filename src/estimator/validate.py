@@ -299,6 +299,36 @@ def validate_common_design(rd: Path) -> list[dict]:
                         element_owner[k] = c["component_id"]
     for cyc in _cycles({c["component_id"]: c["depends_on"] for c in comps}):
         errs.append(E("DEPENDENCY_CYCLE", "components", f"依存関係が循環しています: {' → '.join(cyc)}"))
+    errs += _component_rules(data, std)
+    return errs
+
+
+def _component_rules(design: dict, std: dict) -> list[dict]:
+    """共通作業の立て方（共通基準 BOUND-16〜18）。必須の種別と、FLOW・COMP の最小利用数（警告）。
+    種別と数はアダプター（common.component_rules）から取る。"""
+    rule = std["common"].get("component_rules") or {}
+    if not rule:
+        return []
+    errs: list[dict] = []
+    comps = [c for c in design["components"] if c["implementation_kind"] != "対象外"]
+    for arch in design["architectures"]:
+        types = {c["type_id"] for c in comps if arch["arch_id"] in c["arch_ids"]}
+        for t in rule.get("required_types") or []:
+            if t not in types:
+                errs.append(E("REQUIRED_COMPONENT_MISSING", f"architectures({arch['arch_id']})",
+                              f"構成案 {arch['arch_id']} に {t} がありません（共通基準 構成と重複防止 BOUND-18 等）。"
+                              "要件が不明なら仮定を置いて立て、仮定を質問に残してください", "warning"))
+    dependents: dict[str, int] = {}
+    for c in comps:
+        for dep in c["depends_on"]:
+            dependents[dep] = dependents.get(dep, 0) + 1
+    for c in comps:
+        need = (rule.get("min_users") or {}).get(c["type_id"])
+        users = len(c["used_by"]) + dependents.get(c["component_id"], 0)
+        if need and c["cost_owner"] == c["component_id"] and users < need:
+            errs.append(E("COMPONENT_SINGLE_USE", f"components({c['component_id']})",
+                          f"{c['type_id']} の利用が {users} 件です（used_by と依存部品の合計。{need} 件以上で立てる: 共通基準 BOUND-16・17）。"
+                          "1ケースだけの操作列・1画面だけのUIはケースやPAGEに含めてください", "warning"))
     return errs
 
 
@@ -369,6 +399,7 @@ def validate_assessments(rd: Path) -> list[dict]:
                 errs.append(E("UNKNOWN_QUESTION", p, f"question_id {q} が questions.json にありません"))
     errs += _pending_split_cases(data, norm)
     errs += _component_overlap(data, design, std)
+    errs += _screen_rule(data, design, std)
     errs += _usage_consistency(data, design)
     errs += _question_links(data, design, norm, rd)
     errs += _bare_evidence_refs(data)
@@ -458,6 +489,42 @@ def _component_overlap(data: dict, design: dict, std: dict) -> list[dict]:
                               f"{pr['axis']}={v['score']} ですが、このケースは {', '.join(hits)} を使います。"
                               "部品が所有する作業をこの軸で再び加点していないか確認し、ケース固有に残る作業を overlap_note に書いてください"
                               "（部品を呼ぶだけなら1点。個別基準 計上ルール COST-11・COST-12）", "warning"))
+    return errs
+
+
+def _screen_rule(data: dict, design: dict, std: dict) -> list[dict]:
+    """操作手順の軸の画面の数え方（個別基準 計上ルール COST-13）。operation_screens と factors から期待点を求めて照合し、
+    画面がPAGEの構成要素にあるかも確かめる（警告）。軸と画面数はアダプター（cases.screen_rule）から取る。"""
+    rule = std["cases"].get("screen_rule") or {}
+    if not rule:
+        return []
+    errs: list[dict] = []
+    pages: dict[str, set[str]] = {}
+    for c in design["components"]:
+        if c["type_id"] == "PAGE" and c["implementation_kind"] != "対象外":
+            for arch in c["arch_ids"]:
+                pages.setdefault(arch, set()).update(c["elements"])
+    for n, a in enumerate(data["case_assessments"]):
+        v = a["axes"].get(rule["axis"])
+        if not v or v["score"] not in (1, rule["factor_score"]) or v["score"] == 3:
+            continue
+        p = f"case_assessments/{n}({a['case_id']})/axes/{rule['axis']}"
+        screens = v.get("operation_screens")
+        if screens is None:
+            errs.append(E("AX01_NO_SCREENS", p, "操作した画面 operation_screens がありません（個別基準 計上ルール COST-13）。"
+                                                 "ケースが自分で操作する画面をPAGEの構成要素IDで列挙してください", "warning"))
+            continue
+        n_screens = len(set(screens))
+        expected = rule["factor_score"] if n_screens >= rule["multi_screen_min"] or v.get("factors") else 1
+        if v["score"] != expected:
+            errs.append(E("AX01_SCREEN_RULE", p,
+                          f"{rule['axis']}={v['score']} ですが、操作した画面 {n_screens} 件・要因 {v.get('factors') or 'なし'} からは "
+                          f"{expected} 点です（個別基準 計上ルール COST-13）。判定だけの遷移先と共通部品に委ねた操作は数えません", "warning"))
+        for arch in a["arch_ids"]:
+            unknown = sorted(set(screens) - pages.get(arch, set()))
+            if pages.get(arch) and unknown:
+                errs.append(E("SCREEN_NOT_IN_PAGE", p, f"構成案 {arch} のPAGE構成要素に無い画面です: {', '.join(unknown)}"
+                                                       "（共通基準 BOUND-15。画面の名前をPAGEの elements と揃える）", "warning"))
     return errs
 
 
