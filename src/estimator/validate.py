@@ -248,6 +248,13 @@ def validate_common_design(rd: Path) -> list[dict]:
         for u in c["used_by"]:
             if u not in case_ids:
                 errs.append(E("UNKNOWN_CASE", p, f"used_by のケース {u} が存在しません"))
+        used = set(c["used_by"])
+        mentioned = sorted({m for m in re.findall(r"[A-Za-z]+-\d+", f"{c['responsibility']} {c['need_reason']}")
+                            if m in case_ids and m not in used})
+        if mentioned:
+            errs.append(E("TEXT_CASE_NOT_IN_USED_BY", p,
+                          f"responsibility/need_reason が挙げたケース {', '.join(mentioned)} が used_by にありません。"
+                          "利用者に含めるか、含めない理由を need_reason に書き、挙げ方を揃えてください", "warning"))
         for fld in ("depends_on",):
             for dep in c[fld]:
                 if dep not in by_id:

@@ -48,6 +48,7 @@ CLIは `scripts/estimator <command>`。各コマンドはJSONを出力する。
 8. **意味レビュー（別パス）**: 結果を見直し、指摘を `ai/semantic_review.json` に書く（計算結果は書き換えない）→
    `scripts/estimator mark-review --run <id> --by ai --context independent|self`。
    作成者と別コンテキストのレビュー役（サブエージェント）に任せられれば `independent`、本人が見直した場合は `self`。
+   `mark-review` は既に出力済みの `validation.json`・`summary.md`・`estimate.xlsx` の意味レビュー状態も更新する。
    `self` は「AIレビュー済（自己レビュー）」と表示され、独立レビューとは区別される。詳細: [references/review.md](references/review.md)
 
 各JSONの形式と例: [references/formats.md](references/formats.md)

@@ -191,6 +191,20 @@ def test_mark_review_context(run, capsys):
     assert code == 0 and out["semantic_review_status"] == "AIレビュー済"
 
 
+def test_mark_review_refreshes_exported_outputs(run, capsys):
+    rd, _ = run
+    for st in ("normalize", "common_design", "questions", "assessments"):
+        assert run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)[0] == 0
+    assert run_cli(capsys, "calculate", "--run", "t1")[0] == 0
+    assert run_cli(capsys, "validate", "--run", "t1")[0] == 0
+    assert run_cli(capsys, "export", "--run", "t1")[0] == 0
+    assert "未実施" in (rd / "summary.md").read_text(encoding="utf-8")
+    write_json(rd / "ai/semantic_review.json", {"schema_version": 1, "reviewer": "ai", "findings": []})
+    assert run_cli(capsys, "mark-review", "--run", "t1", "--by", "ai", "--context", "independent")[0] == 0
+    assert json.loads((rd / "validation.json").read_text(encoding="utf-8"))["status"]["semantic_review_status"] == "AIレビュー済"
+    assert "semantic_review_status: AIレビュー済" in (rd / "summary.md").read_text(encoding="utf-8")
+
+
 def test_semantic_review_validation(run, capsys):
     rd, _ = run
     def review(findings):
@@ -248,6 +262,21 @@ def test_double_count_detected(run, capsys):
     write_json(rd / "ai/common_design.json", d)
     code, out = run_cli(capsys, "validate-stage", "--run", "t1", "--stage", "common_design")
     assert code == 1 and any(e["code"] == "DOUBLE_COUNT" for e in out["errors"])
+
+
+def test_text_case_not_in_used_by_warns(run, capsys):
+    rd, _ = run
+    d = design()
+    d["components"][1]["need_reason"] = "C-001とC-002が利用"  # used_by は C-001 のみ
+    write_json(rd / "ai/common_design.json", d)
+    code, out = run_cli(capsys, "validate-stage", "--run", "t1", "--stage", "common_design")
+    assert code == 0
+    w = [x for x in out["warnings"] if x["code"] == "TEXT_CASE_NOT_IN_USED_BY"]
+    assert len(w) == 1 and "C-002" in w[0]["message"]
+    d["components"][1]["need_reason"] = "C-001が利用"
+    write_json(rd / "ai/common_design.json", d)
+    code, out = run_cli(capsys, "validate-stage", "--run", "t1", "--stage", "common_design")
+    assert not [x for x in out["warnings"] if x["code"] == "TEXT_CASE_NOT_IN_USED_BY"]
 
 
 def test_duplicate_requires_reason_and_target(run, capsys):

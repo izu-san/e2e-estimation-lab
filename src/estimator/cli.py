@@ -294,6 +294,18 @@ def cmd_export(a) -> int:
     return 0
 
 
+def _refresh_review_outputs(rd: Path) -> None:
+    """レビュー記録後、既に出力済みの validation.json / summary.md / estimate.xlsx に状態を反映する。"""
+    vp = rd / "validation.json"
+    if not vp.exists():
+        return
+    val = read_json(vp)
+    val.setdefault("status", {})["semantic_review_status"] = _semantic_status(rd)
+    write_json(vp, val)
+    if (rd / "summary.md").exists():
+        export_mod.export(rd)
+
+
 def cmd_mark_review(a) -> int:
     rd = run_dir(a.run)
     rec = {"reviewed_at": now_iso(), "by": a.by, "reviewer": a.reviewer, "note": a.note,
@@ -314,6 +326,7 @@ def cmd_mark_review(a) -> int:
         rec["context"] = a.context
         write_json(rd / "review" / "ai_review.json", rec)
     log_command(rd, "mark-review", a.by)
+    _refresh_review_outputs(rd)
     _out({"semantic_review_status": _semantic_status(rd)})
     return 0
 
