@@ -97,6 +97,8 @@ scripts/start-estimate-session.sh --input inputs/AutomationExercise_01_詳細形
 | エラーコードの意味と対処 | [troubleshooting.md](troubleshooting.md) |
 | 基準Excelを変えたい | [standards_update.md](standards_update.md) |
 | 新しい案件に適用する | [new_project.md](new_project.md) |
+| よくある疑問 | [faq.md](faq.md) |
+| 文書の全体像 | [README.md](README.md)（索引） |
 | 用語がわからない | [glossary.md](glossary.md) |
 | ツールを改修したい | [architecture.md](architecture.md) |
 | 評価結果の読み方 | [evaluation_guide.md](evaluation_guide.md) |

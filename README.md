@@ -5,7 +5,9 @@ Excelのテスト項目書を読み込み、**基準Excelに書かれた判定�
 見積もりの手順は人が行う場合と同じです。項目書を読み、テストケースに整理し、共通部品（ページオブジェクトやログイン処理など）を洗い出し、各ケースの難しさを採点して、基準の工数表から工数を引きます。
 このうち「読んで判断する」部分をAI（Claude Code）が、「数える・計算する・検算する」部分をPythonのツールが担当します。
 
+- ドキュメント索引: [docs/README.md](docs/README.md)
 - **はじめに読む**: [docs/handover.md](docs/handover.md)（最初の1時間の手順）
+- よくある質問: [docs/faq.md](docs/faq.md)
 - 新しい案件に使う: [docs/new_project.md](docs/new_project.md)
 - 用語集: [docs/glossary.md](docs/glossary.md)
 - 内部構造（開発者向け）: [docs/architecture.md](docs/architecture.md)
