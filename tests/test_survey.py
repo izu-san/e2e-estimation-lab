@@ -89,3 +89,13 @@ def test_survey_requires_browsable_site(run, capsys):
     rd, _ = run
     code, out = run_cli(capsys, "survey", "--run", "t1")
     assert code == 2 and "browsable" in out["message"]
+
+
+def test_browsable_site_requires_survey(run, capsys):
+    rd, _ = run
+    man = json.loads((rd / "manifest.json").read_text())
+    man["config_resolved"]["site"] = {"access": "browsable", "base_url": BASE + "/"}
+    write_json(rd / "manifest.json", man)
+    assert "SURVEY_MISSING" in _stage(capsys, "screens")[1]
+    run_survey(rd, man["config_resolved"]["site"], driver=FakeDriver())
+    assert "SURVEY_MISSING" not in _stage(capsys, "screens")[1]

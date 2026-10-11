@@ -240,6 +240,10 @@ def validate_screens(rd: Path) -> list[dict]:
 
     pages = surveyed_pages(rd)
     surveyed = None if pages is None else set().union(*pages)
+    site = read_json(rd / "manifest.json")["config_resolved"].get("site") or {}
+    if site.get("access") == "browsable" and pages is None:
+        errs.append(E("SURVEY_MISSING", "survey/pages.json", "案件設定で対象サイトを閲覧できる（site.access: browsable）のに調査結果がありません。"
+                                                             "scripts/estimator survey --run <id> を実行してから画面一覧を作ってください"))
     seen_cases: set[str] = set()
     for n, sc in enumerate(data["screens"]):
         p = f"screens/{n}({sc['screen_id']})"

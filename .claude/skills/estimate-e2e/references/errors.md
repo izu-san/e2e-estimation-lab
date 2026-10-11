@@ -63,6 +63,7 @@
 | SCREEN_NOT_OPERATED（警告） | 画面一覧でそのケースの `operated_by` に無い画面を操作画面にしている。確認だけの画面は数えない。一覧の誤りなら一覧を直す |
 | CASE_NO_SCREEN（警告） | どの画面の `operated_by`・`checked_by` にも無いケースがある。ケースが操作・確認する画面を一覧に入れる |
 | OBSERVED_WITHOUT_SURVEY | 対象サイトの調査結果（`survey/`）が無いのに `basis: observed`。項目書から推定した画面は `inferred` |
+| SURVEY_MISSING | 案件設定が `site.access: browsable` なのに調査結果が無い。`scripts/estimator survey --run <id>` を実行してから画面一覧を検証し直す |
 | SCREEN_URL_NOT_SURVEYED | `basis: observed` の `url` が調査で開いたページに無い。調査で確認できない画面は `inferred` |
 | SURVEY_PAGE_UNREVIEWED（警告） | 調査で開いたページが `screens` にも `not_counted` にも無い。数えるか、`url` つきで数えない理由を書く |
 | SCREEN_ROLE_OVERLAP | 同じケースが `operated_by` と `checked_by` の両方にある。操作するなら `operated_by` だけ |
