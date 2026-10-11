@@ -1,196 +1,330 @@
-# E2E自動化工数見積もり（Claude Code Skill + Pythonハーネス）
+# E2E自動化工数見積もり（AI + Pythonツール）
 
-Excelのテスト項目書から、**基準Excelに書かれた判定基準と仮置き工数を適用して**Playwright自動化の構築工数を見積もる実験環境。
-要件は [docs/ClaudeCode_E2E_Estimator_Implementation_Guide.md](docs/ClaudeCode_E2E_Estimator_Implementation_Guide.md)。
+Excelのテスト項目書を読み込み、**基準Excelに書かれた判定基準と工数表**を当てはめて、Playwrightによる自動化の構築工数を見積もる実験用リポジトリです。
 
-- 意味判断（項目の整理・共通部品の設計・5軸採点・共通作業の難易度）… Claude Code（Skill `/estimate-e2e`）
-- 抽出・検証・計算・出力 … Python CLI（`scripts/estimator`）。AIが書いた計算値は採用せず、常に再計算する。
-- 仮置き工数の妥当性・校正は対象外。数値は基準Excelからだけ取得する。
+見積もりの手順は人が行う場合と同じです。項目書を読み、テストケースに整理し、共通部品（ページオブジェクトやログイン処理など）を洗い出し、各ケースの難しさを採点して、基準の工数表から工数を引きます。
+このうち「読んで判断する」部分をAI（Claude Code）が、「数える・計算する・検算する」部分をPythonのツールが担当します。
 
-## 構成
+- **はじめに読む**: [docs/handover.md](docs/handover.md)（最初の1時間の手順）
+- 結果のレビュー: [docs/review_guide.md](docs/review_guide.md)
+- エラー対処: [docs/troubleshooting.md](docs/troubleshooting.md)
+- 基準Excelの変更: [docs/standards_update.md](docs/standards_update.md)
+- 要件・設計: [docs/ClaudeCode_E2E_Estimator_Implementation_Guide_v1.1.md](docs/ClaudeCode_E2E_Estimator_Implementation_Guide_v1.1.md)
+- 検証結果のまとめ: [docs/poc_report.md](docs/poc_report.md)
+- 基準Excelへの確認事項と決定の経緯: [docs/standards_questions.md](docs/standards_questions.md)
+- レビュー用AIの評価設計: [docs/reviewer_agent_test_design.md](docs/reviewer_agent_test_design.md)
 
-| パス | 内容 |
+## 最初に押さえておくこと
+
+### 何を任せていて、何を任せていないか
+
+| 作業 | 担当 | 理由 |
+|---|---|---|
+| 項目書の読み取り（セル・結合・数式の抽出） | Pythonツール | 機械的に正確に行える |
+| 項目の整理、共通部品の設計、5軸の採点 | AI | 文章を読んで意味を判断する作業 |
+| 難易度の決定、工数の計算、集計 | Pythonツール | AIに計算させると誤るため、必ずツールで計算する |
+| 提出内容のチェック（ID・根拠・二重計上など） | Pythonツール | 決まったルールで機械的に検査できる |
+| 別の視点での見直し（意味レビュー） | 別のAI | 作成したAIとは別の「新しい会話」で読み直す |
+| 最終確認・承認、基準の線引きの決定 | **人** | AIの判断の正しさは人が確認する |
+
+大事な点が3つあります。
+
+1. **工数の数字は基準Excelにしかありません。** ツールやAIへの指示文に数値を書き写していません。基準を直せば、次の見積もりから自動で追従します。
+2. **AIは数字を書きません。** AIが書くのは「このケースは操作手順が2点」といった判断と、その根拠（元のセル位置）だけです。工数や合計を書いた提出物は、形式チェックで弾かれます。
+3. **AIの判断は毎回少しぶれます。** 同じ項目書でも実行のたびに採点が変わることがあります。そのため、ぶれを抑える仕組み（後述）と、人の確認が前提になっています。
+
+### 用語
+
+| 用語 | 意味 |
 |---|---|
-| `CLAUDE.md` | 常時守る原則 |
-| `.claude/skills/estimate-e2e/` | Skill本体（`SKILL.md`）と工程別の詳細（`references/`） |
-| `.claude/agents/estimate-reviewer.md` | 意味レビュー専用サブエージェント（読取り専用。見積もり作成と別コンテキスト） |
-| `config/estimate.example.yaml` | 案件設定の雛形 |
-| `config/standards_adapter.yaml` | 基準Excelの読取りアダプター（見出し文字列で表・ラベルを特定） |
-| `config/claude-estimate.settings.json` | 見積もりモード用の権限設定テンプレート（runごとに絶対パスで生成） |
-| `standards/` | 基準Excel（正本・読取り専用）→ [standards/README.md](standards/README.md) |
-| `inputs/` | 顧客項目書（読取り専用）→ [inputs/README.md](inputs/README.md) |
-| `src/estimator/` | ハーネス本体 |
-| `scripts/` | CLI入口、起動ランナー、Hooks、権限テスト |
-| `schemas/` | 中間JSONのJSON Schema |
-| `evals/` | 評価スイート・期待事項・回帰期待値 |
-| `tests/` | 単体・統合・Hooksテスト（人工データを生成して使う） |
-| `runs/<run_id>/` | 1回の見積もりの全成果物 |
+| Claude Code | AnthropicのAIが、ターミナルでファイルを読み書きしコマンドを実行しながら作業するツール。本リポジトリではこれが見積もりの判断を行う |
+| Skill | Claude Codeに渡す「作業手順書」。`.claude/skills/estimate-e2e/` にあり、`/estimate-e2e` で呼び出す |
+| ハーネス | AIの作業を支える周辺ツール一式（読み取り・検証・計算・出力）。`src/estimator/` と `scripts/estimator` |
+| サブエージェント | メインのAIとは別の会話で動く、役割を限定したAI。ここでは意味レビュー専用（`estimate-reviewer`） |
+| JSON | 構造化データの書式。AIの判断結果をこの形式でファイルに残す（`runs/<run_id>/ai/*.json`） |
+| スキーマ | JSONに書いてよい項目と型の定義。違反するとエラーになる |
+| run（ラン） | 1回の見積もり実行。成果物は `runs/<run_id>/` に全部まとまる |
+| 基準Excel | 判定基準と仮置き工数が書かれた2冊のExcel（`standards/`）。工数の正本 |
+| 5軸 | 個別ケースの採点軸。操作手順(AX-01)・確認手順(AX-02)・実装手段(AX-03)・あいまい度(AX-04)・データ準備後処理(AX-05)を各1〜3点で採点する |
+| 意味レビュー | 見積もりの内容（分け方・採点・二重計上など）を、別のAIが読み直して指摘する工程 |
+
+## 見積もりの流れ
+
+```text
+項目書(xlsx) ─▶ ① 読み取り ─▶ ② 項目の整理 ─▶ ③ 画面一覧 ─▶ ④ 共通設計
+ (ツール)        (AI)        (AI)       (AI)
+                                                  │
+ ⑧ 人が確認 ◀─ ⑦ 意味レビュー ◀─ ⑥ 計算・検証・出力 ◀─ ⑤ 確認事項と採点
+              (別のAI)         (ツール)             (AI)
+```
+
+1. **読み取り**: ツールが項目書の全セルを座標つきで取り出す。
+2. **項目の整理**: AIが原項目をテストケースに整理する（分割・統合する場合は理由を記録）。
+3. **画面一覧**: 案件に登場する画面を最初に一度だけ確定する。対象サイトを閲覧できる案件では、ツールがサイトを「見るだけ」で調べる（クリック・入力・送信はしない）。
+4. **共通設計**: ページオブジェクト（PAGE）、共通UI（COMP）、業務フロー（FLOW）などの共通部品と、使うケースを決める。
+5. **確認事項と採点**: 不明点は質問として残し（仮の数字は作らない）、5軸の点数と共通部品の難易度を、根拠セルつきで付ける。
+6. **計算・検証・出力**: ツールが基準Excelの値で工数を計算し、結果を検算してExcelに出力する。
+7. **意味レビュー**: 別のAIが成果物と原資料を読み、見落としや二重計上を指摘する。作成側が指摘ごとに対応を記録する。
+8. **人の確認**: 「条件付き」「要確認」の項目と未対応の指摘を人が確認し、承認する。
+
+各工程でAIが書いたJSONはツールが検査し、誤りがあればエラー内容をAIに返して直させます（修正は初回提出のあと最大2回）。
+
+### ぶれを抑える仕組み
+
+AIの判断は、基準の文章に曖昧さがあるとぶれます。そこで次の対策をとっています（詳細は [docs/poc_report.md](docs/poc_report.md)）。
+
+- **線引きを基準に書く**: 曖昧な判断を基準Excelのルールに追記し、検査ツールがルールどおりかを照合する。
+- **事実を先に確定する**: 画面一覧を先に作り、後の工程はそこから選ぶ。サイトを閲覧できる案件は実際に調べる。
+- **手順をツールで強制する**: 「AIへの指示」だけでは手順が飛ばされることがあるため、守るべき手順は検査エラーで止める。
 
 ## セットアップ
 
+前提: Python 3.11以上、[uv](https://docs.astral.sh/uv/)、Claude Code。
+
 ```bash
-uv sync                       # Python 3.11+、依存は pyproject.toml / uv.lock で固定
-uv run pytest -q              # テスト
-cp config/estimate.example.yaml config/estimate.yaml
-# standards/ に基準Excel 2冊、inputs/ に項目書を配置
-# 対象サイトを調査する案件だけ（Node.js 18+）: 読み取りだけの調査に使う playwright-cli と Chromium
-npm install --prefix tools/site-survey && tools/site-survey/node_modules/.bin/playwright install chromium
-scripts/estimator inspect-standards --config config/estimate.yaml   # 基準の読取り確認（standards/README.md 参照）
+uv sync                       # 依存関係のインストール（pyproject.toml / uv.lock で固定）
+uv run pytest -q              # テスト（人工データで動くので基準Excelが無くても実行できる）
+cp config/estimate.example.yaml config/estimate.yaml    # 案件設定を作る
+# standards/ に基準Excel 2冊、inputs/ に項目書を置く
+scripts/estimator inspect-standards --config config/estimate.yaml   # 基準Excelが正しく読めるか確認
 ```
 
-見積もりモード（保護付き実行）は既定で権限ルール＋Hookによる保護（OS非依存）。
-追加でOSサンドボックスを使う場合（`--sandbox`）は、Linux/WSL2で `bubblewrap` と `socat` が必要:
+対象サイトを調べる案件だけ、追加で Node.js 18以上が必要です。
+
+```bash
+npm install --prefix tools/site-survey && tools/site-survey/node_modules/.bin/playwright install chromium
+```
+
+`inputs/` の項目書と `standards/` の基準Excelは、検証用に作成したサンプルデータで、リポジトリに含まれています（[inputs/README.md](inputs/README.md)、[standards/README.md](standards/README.md)）。実際の顧客資料や社外秘の基準を使うときは、先に `.gitignore` で除外してから配置してください。
+
+## 見積もりの実行
+
+実行方法は2通りあります。
+
+### A. 通常のClaude Codeセッションから実行する
+
+```bash
+claude        # このリポジトリで起動
+```
+
+Claude Code上で次のように入力します。
+
+```text
+/estimate-e2e inputs/<項目書>.xlsx --config config/estimate.yaml
+/estimate-e2e --project inputs/<案件マニフェスト>.yaml --config config/estimate.yaml   # 複数ファイルを1案件として見積もる
+/estimate-e2e --run <run_id>                                                           # 途中で止まったrunの再開
+```
+
+- 利用者が明示的に入力したときだけ動きます（AIが勝手に起動することはありません）。
+- 普通の開発用セッションの権限で動くため、AIはファイルを書き換えられる状態です。次のBのような書込み制限はありません。
+
+### B. 保護付きで実行する（見積もりモード）
+
+AIが書き込めるのを `runs/<run_id>/` だけに制限し、入力・基準・ツール自体を誤って書き換えられないようにして実行します。
+
+```bash
+scripts/start-estimate-session.sh --input inputs/<項目書>.xlsx --config config/estimate.yaml
+scripts/start-estimate-session.sh ... --print      # 起動コマンドの表示だけ（実行しない）
+scripts/start-estimate-session.sh ... --headless   # 対話なしで最後まで実行
+scripts/start-estimate-session.sh ... --sandbox    # OSレベルの書込み制限も追加（Linux/WSL2は要 bubblewrap・socat）
+```
+
+このスクリプトは、runの作成と読み取りを済ませたうえで、そのrun専用の権限設定を生成してClaude Codeを起動します。
+`--sandbox` を指定して必要なソフトが無い場合は、保護なしで実行せず、起動を中止します。
+
 ```bash
 sudo apt-get install bubblewrap socat   # --sandbox を使う場合のみ
 ```
 
-## 実行方法
-
-### A. 開発セッションから実行（MVPの基本経路）
-Claude Code で:
-```text
-/estimate-e2e inputs/<項目書>.xlsx --config config/estimate.yaml
-/estimate-e2e --project inputs/<案件マニフェスト>.yaml --config config/estimate.yaml   # 複数ファイルで1案件
-/estimate-e2e --run <run_id>                                                           # 既存runの再開
-```
-Skillは `disable-model-invocation: true` のため、ユーザーが明示的に起動したときだけ動く。
-この経路では保護設定は効いていない（通常の開発セッションの権限）。
-
-### B. 見積もりモード（読取り専用の保護付き）
-```bash
-scripts/start-estimate-session.sh --input inputs/<項目書>.xlsx --config config/estimate.yaml
-scripts/start-estimate-session.sh ... --print      # 起動コマンドを表示のみ
-scripts/start-estimate-session.sh ... --headless   # claude -p で非対話実行
-scripts/start-estimate-session.sh ... --sandbox    # OSサンドボックスを追加（Linux/WSL2はbubblewrap+socat必須）
-```
-ランナーが `init-run` → `extract` を行い、`runs/.sessions/<run_id>.settings.json` を生成して
-`claude --settings <生成設定> --permission-mode dontAsk "/estimate-e2e --run <run_id>"` を起動する。
-`--sandbox` 指定時に依存が無い場合は起動しない（無保護での実行を成功扱いにしない）。
-
-### CLIの工程（AI解析はClaude Codeセッションが担当し、CLI 1回では完結しない）
-
-```text
-scripts/estimator init-run (--input X.xlsx | --project M.yaml) --config C.yaml [--run-id ID]
-scripts/estimator extract --run ID                 # 構造抽出 → raw_workbook.json, source_inventory.json, views/*.md
-scripts/estimator render --run ID [--sheet S] [--rows 1-80]   # 座標つきテキスト表示
-scripts/estimator profile --run ID --sheet S [--rows 5-304] [--header-row 4] [--columns B,G] [--group-by B]
-                                                   # 列ごとの値の分布（大規模資料の繰返し構造の把握）
-  （AI）ai/normalized_cases.json, ai/screens.json（画面一覧）, ai/common_design.json, ai/questions.json, ai/assessments.json を作成（questionsは採点が参照するため採点より先）
-scripts/estimator validate-stage --run ID --stage normalize|screens|common_design|questions|assessments|semantic_review
-scripts/estimator calculate --run ID               # → estimate.json
-scripts/estimator validate --run ID                # → validation.json（再計算照合を含む）
-scripts/estimator export --run ID                  # → estimate.xlsx, summary.md
-scripts/estimator mark-review --run ID --by ai --context independent|self | --by human [--reviewer 名前]
-scripts/estimator survey --run ID                  # 対象サイトの読み取りだけの調査（site.access: browsable のときだけ）
-scripts/estimator status --run ID                  # 工程状態・上流変更による無効化
-scripts/estimator inspect-standards --config C.yaml [--show-text]
-scripts/estimator evaluate --suite evals/suites/automationexercise.yaml
-```
-`--run` には run_id または run ディレクトリのパスを指定できる。
-
-### 再開
-`scripts/estimator status --run ID` で各工程の状態を確認する。
-- 上流ファイル（AI提出JSON・抽出結果・基準）のハッシュが記録と違うと、その工程より下流が `stale` になる。
-  `ai/*.json` を検証後に変更した場合は `modified`。該当工程の `validate-stage` からやり直す。
-- 共通設計を変えたら採点（assessments）が stale になる。影響ケースを再採点してから `calculate`。
-- 入力・基準・設定・アダプターが実行開始後に変わると `SOURCE_CHANGED` で止まる。新しいrunを作る。
-- 修正上限（既定: 初回提出＋修正2回）に達した工程は `failed_repair_limit`。その状態で計算・出力し、検証失敗として残す。
-
-## 出力（`runs/<run_id>/`）
-
-| ファイル | 内容 |
-|---|---|
-| `manifest.json` | run_id、入力/基準/設定/アダプターのSHA-256・サイズ、基準版、ハーネス版・git rev、環境 |
-| `standards.json` / `standards_cells.json` / `standards_text/*.md` | 基準Excelから実行時に生成した参照値（セル位置つき）・セル一覧・全文 |
-| `raw_workbook.json` | 全セル（型・原文・数式・保存値）、結合、非表示、コメント、図形位置 |
-| `source_inventory.json` | シート・領域候補・読取り警告・制約 |
-| `views/*.md` | AI読解用の座標つきテキスト（大きいシートは分割、境界を注記） |
-| `standards_text/*.md` / `*.digest.md` | 基準Excelの文章（全文／判定例・出力仕様を省いたダイジェスト。読む順は digest → 必要なら全文） |
-| `ai/*.json` | AI提出物（項目整理・共通設計・採点・確認事項・意味レビュー） |
-| `estimate.json` | スクリプトが算出した工数（構成案別、下限/標準/上限） |
-| `validation.json` | 機械検証・再計算照合・状態（execution_status / machine_validation / estimate_completeness / semantic_review_status） |
-| `estimate.xlsx` | サマリー、個別ケース、共通作業、原項目対応、確認事項、意味レビュー、レビュー、検証結果、実行条件 |
-| `summary.md` | 簡潔な結果 |
-| `stage_state.json` / `logs/` | 工程状態・コマンド履歴 |
-
-状態の意味は混同しない: `difficulty`（Low/Mid/High/Impossible/null）、`estimate_status`（確定可能/条件付き/要確認）、
-`scope`（対象内/別見積/対象外）、`execution_status`（処理成功/処理失敗）、`estimate_completeness`（全対象算定/一部未算定）、
-`semantic_review_status`（未実施/AIレビュー済/人確認済。AIレビュー済には「自己レビュー」「未対応N件」「レビュー記録後に見積もり変更」を括弧で併記）。
-意味レビューの各指摘には対応（`resolution`: fixed/question/rejected/deferred）を記録し、`mark-review --by ai` は未記録の指摘があると拒否する。「算定済み総計」は一部未算定のとき案件全体の確定総額ではない。
-
-## 計算ルール（実装）
-- 計算規則の版は `src/estimator/__init__.py`（現行 `case-rule-2` / `common-rule-2`）。計算結果が変わる変更では必ず上げる。
-  上げ忘れは `tests/test_calc_version.py` が固定入力の計算結果の指紋（`tests/golden/calculate_fingerprint.json`）で検出する。
-  版が違う estimate.json は再計算照合で `RULE_VERSION_CHANGED`（手編集・上流変更の `RECOMPUTE_MISMATCH` と区別）。
-- 個別ケース: 対象外/別見積を分離 → 実現不可確認済はImpossible → 情報不足・未採点軸ありは要確認(null)
-  → いずれか3点または合計≧High閾値でHigh → 合計≦Low上限でLow → 残りMid。閾値・単価は基準Excelのセル値。
-  原項目の未確定部分（`pending_parts`、ケースにせず保留したもの）は未解決件数に数える。
-- 共通作業: `種別ID|難易度` で共通工数表を参照し、単価×構成要素数。基準にないキーは未算定（0や近似にしない）。
-  既存流用は適合性確認済のときだけ新規実装分0。改修は変更責務を明示して同じ単価表を適用（割引なし）。
-  `cost_owner` が他作業なら計上しない。同一構成案・同種別で同じ要素の重複計上は検証エラー。
-- 下限・標準・上限をそれぞれ集計。null は合計から除き、未算定件数として残す。
-- 数式は評価しない。基準の数式セルは保存済み計算結果のみ使い、無ければエラー。
-
-## テスト
-
-```bash
-uv run pytest -q
-```
-- `test_calculate.py`: 総合判定（全軸1点/1〜2軸2点/3軸2点/3点あり/未採点/Impossible）、null工数、既存流用0、数量、共通部品の単一計上、改修、対象外、構成案分離、基準外キー、再現性、未算定件数。
-- `test_standards.py`: 正本の「判定例」12件・「判定集計例」（22/39/64）の回帰、使い捨て人工基準での値追従、重複キー、下限≦標準≦上限、負数・非数値・空欄・単位欠落、未知の種別ID、未対応版、数式キャッシュ無し、文章変更検出、構造変更検出、判定集計例の再計算。正本配置時は「判定集計例」回帰（22/39/64）を実行（未配置ならskip）。
-- `test_extract.py`: 結合セルを前方補完しない、非表示行/シート、数式キャッシュ無し、`=`始まりの文字列、列順・列名・シート名・ファイル名・説明行の変更、画像・コメント検出、非対応形式、出力時に数式化しない。
-- `test_pipeline.py`: CLI全工程、手編集した estimate.json の拒否、AIの計算値提出の拒否、領域の処遇漏れと修正上限、重複計上、重複候補の根拠、不正なセル参照、上流変更による無効化、入力変更検出、案件マニフェスト、入力欠落の記録。
-- `test_items.py`: 項目群の展開（複数行＋結合セル、IDなし、行数不整合、範囲外）、列の値による項目選択、.xlsm読込とVBA検出、大規模形式でのCLI全工程、見積もり状態規則（RULE-07・RULE-03）、共通作業のImpossible、条件一覧の出力。
-- `test_review_and_coverage.py`: 意味レビュー指摘の対応記録と状態、計算規則の版変更の区別、未確定部分の保留、共通部品との二重加点の警告、前提行の追跡、形式横断の一貫性評価、AX-01の画面の数え方・共通作業の立て方・PAGEの難易度の仮ルール、画面一覧とPAGE・AX-01の照合。
-- `test_calc_version.py`: 計算規則の版の上げ忘れ検出（固定入力の計算結果の指紋）。
-- `test_guardrails.py`: Hooks（保護対象への編集拒否、スキーマ通知、Stopの回数制限）と見積もり設定の生成。
-
-### 権限テスト（実機）
-```bash
-scripts/permission_check.sh [--keep]
-```
-使い捨てディレクトリに人工データでリポジトリを複製し、生成した見積もり設定で `claude -p` を起動して、
-実行前後のファイル状態で判定する（AIの応答では判定しない）。結果は `runs/permission_check_*.json`。
-
-## 評価
-```bash
-scripts/estimator evaluate --suite evals/suites/automationexercise.yaml
-```
-- 6ファイルは別案件として1ファイルずつ実行する。runは入力ハッシュが一致する最新runを自動選択。
-- 期待事項（`evals/expectations/`）は実行時AIの出力から作らない。`review_status` が `human_reviewed` でない結果は暫定。
-- 件数は評価資料にだけ記載し、解析ロジックには持たない。
-- 人のレビューには `estimate.xlsx` の「レビュー」シート（AIの分解・採点・理由と、判定記入欄）を使う。
-- `consistency_groups`: 同じ内容を別書式で書いた項目書群（01〜06）の最新runどうしで、工数・件数のばらつき、
-  原IDごとの難易度の食い違い、入力ごとの試行回数（前のrunのAI成果物を流用したrunは独立試行に数えない）を出す。
-  許容幅（`tolerances`）は評価担当者が決める。未記入なら `report_only` で合否にしない。
-- 計算規則の版が変わった後の古いrunは `calculation_reproducible` が失敗し、理由に版の変更が出る（`calculate` の再実行で解消）。
-
-## 開発モードと見積もりモードの切替
+### 開発モードと見積もりモード
 
 | | 開発モード | 見積もりモード |
 |---|---|---|
 | 起動 | 通常の `claude` | `scripts/start-estimate-session.sh` |
-| 設定 | ユーザー/プロジェクト設定のみ | 上記＋ `runs/.sessions/<run_id>.settings.json`（`--settings`） |
-| 書込み | 通常どおり | 現在の `runs/<run_id>/` のみ（Edit権限＋Hook。`--sandbox` 時は sandbox denyWrite も） |
-| Hooks | 動作しない | PreToolUse（保護対象への編集拒否）/ PostToolUse（ai/*.jsonのスキーマ通知）/ Stop（成果物欠落を最大2回通知） |
-| Skill/ハーネス改修 | 可 | 不可 |
+| 書込み | 通常どおり | 現在の `runs/<run_id>/` のみ |
+| 実行できるコマンド | 通常どおり | `scripts/estimator` のみ |
+| Skill・ツールの改修 | 可 | 不可 |
 
-既存の `~/.claude/settings.json`、プロジェクトの `.claude/settings.json` は変更しない（本リポジトリはプロジェクト設定を持たない）。
-有効設定は見積もりセッション内で `/permissions`（`--sandbox` 時は `/sandbox` も）で確認できる。
-Bashは `scripts/estimator` のみ許可（`dontAsk` のため他は拒否）。意味レビュー用の `estimate-reviewer` 以外のエージェントはdenyしている。
+ツールやSkillを直すときは開発モードで行い、`uv run pytest -q` を通してください。見積もり中にAIが自分でツールを直してエラーを消すことは禁止しています。
 
-## 制約・未実装（MVP）
-- 入力の正式対応は `.xlsx` と `.xlsm`（OOXMLとして読む。VBAは実行・解析せず、存在だけ警告）。`.xls`・パスワード保護（OLE形式）・破損ファイルは非対応として報告。
-- 大規模資料（例：2,400件）は、AIが `item_groups`（行範囲・1項目の行数・ID列）で原項目を宣言し、スクリプトが展開する。
-  ケースへの対応付けは `source_item_query`（列の値で選択）。AIが全行を読まずに済むよう `profile` で繰返し構造を把握する。
-  画像・図形は位置と図形内テキストのみ検出し、画像内の文字は読まない。グラフシートは解析対象外。
-- 基準Excelは `config/standards_adapter.yaml` の見出し候補で読む。v0.1正本（2026-10-10配置）で全項目の読取りと、判定例・判定集計例の回帰を確認済み。
-  版が変わったら `inspect-standards` で再確認する（standards/README.md）。
-- 既定（sandboxなし）の保護は、Edit権限・Hook・Bashの許可リスト（`scripts/estimator` のみ）。OSによる書込み禁止ではないため、
-  許可リストを広げる変更をすると保護が弱まる。実機確認は `scripts/permission_check.sh`（`--sandbox` でsandbox付き）。
-- `--sandbox` 時のsandboxの書込み制御は「作業ディレクトリは既定で書込み可」に対して保護対象を個別に `denyWrite` する方式。
-  そのため sandbox 内の Bash からは、リポジトリ直下への**新規**ファイル作成や、**他の** `runs/<別id>/` への書込みは防げない
-  （Edit/Writeツールは Hook と権限ルールで現在のrun以外を拒否）。厳密な分離が必要な場合は、入力/基準/実装を
-  read-only マウントしたコンテナで実行する（未実装）。
-- Hooks は（sandbox使用時も）sandbox の外で動く。Hook・起動スクリプトは `.venv/bin/python` と bash を前提とし、ネイティブWindowsは未対応。PostToolUse はスキーマのみの軽量検証。最終採否は `validate` の再計算で判断する。
-- AI解析はClaude Codeセッションが行うため、CLI 1回では完結しない。APIキーを使う独自サービスは前提にしない。
+## 途中経過の確認と再開
+
+```bash
+scripts/estimator status --run <run_id>
+```
+
+各工程が完了／失敗／再確認が必要（stale）のどれかを確認できます。
+
+- **stale（再確認が必要）**: 上流の成果物（項目整理など）が変わったため、下流の工程の前提が古くなった状態。該当工程の `validate-stage` からやり直します。共通設計を変えたら採点も再確認が必要です。
+- **modified**: 検証後に `ai/*.json` を手で変更した状態。同様にやり直します。
+- **SOURCE_CHANGED で止まった**: 実行開始後に入力・基準・設定が変更された。結果が食い違うので、新しいrunを作り直してください。
+- **failed_repair_limit**: 修正回数の上限（初回＋2回）に達した工程。エラーを残したまま計算・出力まで進み、結果には「検証失敗」と記録されます。
+
+## 結果の見方（`runs/<run_id>/`）
+
+まず見るのは次の3つです。
+
+| ファイル | 内容 |
+|---|---|
+| `summary.md` | 結果の要約 |
+| `estimate.xlsx` | 詳細。サマリー、個別ケース、共通作業、原項目との対応、確認事項、意味レビュー、人の判定記入用の「レビュー」シート、検証結果、実行条件 |
+| `validation.json` | 検証結果と状態 |
+
+その他の成果物:
+
+| ファイル | 内容 |
+|---|---|
+| `manifest.json` | 入力・基準・設定のハッシュ値（ファイルの指紋）、版、実行環境。同じ結果を再現できるかの手がかり |
+| `standards.json` / `standards_cells.json` / `standards_text/` | 実行時に基準Excelから作った参照値（セル位置つき）と、基準の文章 |
+| `raw_workbook.json` / `source_inventory.json` / `views/*.md` | 項目書の全セル、シート・領域の一覧と読み取り時の警告、AIが読むための座標つきテキスト |
+| `ai/*.json` | AIの判断結果（項目整理、画面一覧、共通設計、確認事項、採点、意味レビュー） |
+| `estimate.json` | ツールが計算した工数（構成案別に、下限・標準・上限） |
+| `stage_state.json` / `logs/` | 工程の状態とコマンド履歴 |
+
+### 状態の言葉
+
+似た言葉が複数あるので、混同しないでください。
+
+| 項目 | 取りうる値 | 意味 |
+|---|---|---|
+| `difficulty`（難易度） | Low / Mid / High / Impossible / null | nullは判断材料が足りず難易度を決められない状態 |
+| `estimate_status` | 確定可能 / 条件付き / 要確認 | 見積もりの確かさ。条件付きは「仮定が成り立つなら」の数字 |
+| `scope` | 対象内 / 別見積 / 対象外 | 今回の見積もりに含めるか |
+| `execution_status` | 処理成功 / 処理失敗 | ツールが正常に最後まで動き、再計算も一致したか。見積もり内容の正しさとは別 |
+| `estimate_completeness` | 全対象算定 / 一部未算定 | 工数を出せなかった項目が残っていないか |
+| `semantic_review_status` | 未実施 / AIレビュー済 / 人確認済 | 意味レビューの状況。AIレビュー済には「自己レビュー」（作成したAI自身の見直し）「未対応N件」なども併記される |
+
+- 「処理成功」でも、内容を人が確認済みとは限りません。
+- 「一部未算定」のとき、「算定済み総計」は案件全体の確定金額ではありません。出せた分だけの合計です。
+- 意味レビューの指摘には、対応（`resolution`: fixed=修正 / question=質問に回す / rejected=不採用 / deferred=保留）を必ず記録します。未記録の指摘があると、レビュー済みにできません。
+
+## 計算ルール
+
+数値は基準Excelの値を使います。ここでは考え方だけ示します（正確な条件は基準Excelの「総合判定」シートが正本です）。
+
+**個別ケース**（上から順に判定）
+1. 対象外・別見積のものを分ける。
+2. 実現不可と確認済みならImpossible。工数は出さない。
+3. 情報不足、または採点できない軸があれば「要確認」（難易度null、工数なし）。
+4. いずれかの軸が3点、または5軸の合計がHigh閾値以上ならHigh。
+5. 合計がLow上限以下ならLow。
+6. 残りはMid。
+
+**共通作業**
+- 「種別ID|難易度」（例: `PAGE|Mid`）で共通工数表を引き、単価 × 構成要素の数で計算する。
+- 基準に無い組合せは「未算定」にする。0や近似値で埋めない。
+- 既存部品を流用する場合、新規実装分が0になるのは、存在と適合性が確認できたときだけ。
+- 改修は、変更する責務を明記して同じ単価表を適用する（根拠のない割引はしない）。
+- 他の作業に含めて計上するものは、重複して計上しない。同じ要素を二重に計上するとエラー。
+
+**集計**
+- 下限・標準・上限をそれぞれ合計する。算定できなかったものは合計に含めず、件数を残す。
+- 基準Excelの数式は評価しない（保存されている計算結果だけを使い、無ければエラー）。
+
+**計算規則の版**: 計算の仕方を変えたら `src/estimator/__init__.py` の版（現行 `case-rule-2` / `common-rule-2`）を必ず上げます。上げ忘れはテスト（`tests/test_calc_version.py`）が検出します。版が違う過去のrunは、再計算の照合で「規則の版が変わった」という理由つきで失敗します（`calculate` を再実行すれば解消）。
+
+## コマンド一覧
+
+通常は上記の見積もり実行（Skill）が内部で呼びます。直接使うのは、状態確認やデバッグのときです。AIの判断が必要な工程があるため、コマンド1回で見積もりは完結しません。
+
+```text
+scripts/estimator init-run (--input X.xlsx | --project M.yaml) --config C.yaml [--run-id ID]   # runを作る
+scripts/estimator extract --run ID                  # 項目書の読み取り
+scripts/estimator render --run ID [--sheet S] [--rows 1-80]    # 座標つきテキストで表示
+scripts/estimator profile --run ID --sheet S [--rows 5-304] [--header-row 4] [--columns B,G] [--group-by B]
+                                                    # 列ごとの値の分布（大きな項目書の繰返し構造の把握）
+  （AIが ai/normalized_cases.json → screens.json → common_design.json → questions.json → assessments.json を作成。
+    questions は採点が参照するため採点より先）
+scripts/estimator validate-stage --run ID --stage normalize|screens|common_design|questions|assessments|semantic_review
+scripts/estimator survey --run ID                   # 対象サイトの調査（閲覧できる案件のみ）
+scripts/estimator calculate --run ID                # 工数の計算 → estimate.json
+scripts/estimator validate --run ID                 # 全体検証（再計算の照合を含む）→ validation.json
+scripts/estimator export --run ID                   # → estimate.xlsx, summary.md
+scripts/estimator mark-review --run ID --by ai --context independent|self | --by human [--reviewer 名前]
+scripts/estimator status --run ID                   # 工程の状態の確認
+scripts/estimator inspect-standards --config C.yaml [--show-text]    # 基準Excelの読み取り結果の確認
+scripts/estimator evaluate --suite evals/suites/automationexercise.yaml   # 評価の実行
+```
+
+`--run` には run_id、または runディレクトリのパスを指定できます。
+
+## テストと評価
+
+### 自動テスト
+
+```bash
+uv run pytest -q
+```
+
+人工データで動くため、AIの利用料はかかりません。主な確認内容は次のとおりです。
+
+| テスト | 確認内容 |
+|---|---|
+| `test_calculate.py` | 難易度判定（全軸1点／3点あり／未採点／Impossible など）、既存流用、数量、共通部品の二重計上防止、構成案の分離、再現性 |
+| `test_standards.py` | 基準Excelの読み取り。基準の判定例12件と「判定集計例」（下限22・標準39・上限64人時）の再現、基準の値を変えたときの追従、不正な基準の検出（正本を置いていなければ一部skip） |
+| `test_extract.py` | 項目書の読み取り。結合セル・非表示行・数式・画像・コメントの扱い、列順や名前が変わっても読めること |
+| `test_pipeline.py` | 全工程の通し実行、手編集の拒否、AIが計算値を書いたときの拒否、上流変更による無効化 |
+| `test_items.py` | 大規模項目書の展開、`.xlsm` の読み込み、状態の規則 |
+| `test_review_and_coverage.py` | 意味レビューの指摘と対応の記録、画面一覧と各工程の整合 |
+| `test_calc_version.py` | 計算規則の版の上げ忘れ検出 |
+| `test_guardrails.py` | 保護機能（書込み拒否・スキーマ通知・見積もり設定の生成） |
+| `test_reviewer_eval.py` | レビュー用AI評価の採点処理（オフライン部分） |
+
+### 権限テスト（実機）
+
+```bash
+scripts/permission_check.sh [--keep]
+```
+
+使い捨てのディレクトリに人工データを複製し、見積もりモードでClaude Codeを実際に起動して、書込み制限が効いているかを**実行前後のファイル状態**で判定します（AIの返答では判定しません）。結果は `runs/permission_check_*.json`。AIの利用料がかかります。
+
+### 評価（ばらつきの測定）
+
+```bash
+scripts/estimator evaluate --suite evals/suites/automationexercise.yaml
+```
+
+- 同じ内容を6種類の書式で書いた項目書（01〜06）を別々に見積もり、結果がどれだけそろうかを測ります。各ファイルは別案件として1つずつ実行します。
+- 期待値（`evals/expectations/`）はAIの出力から作らず、人が確認します。`review_status` が `human_reviewed` でないものによる評価結果は「暫定」です。
+- 工数や難易度のばらつきの許容幅（`tolerances`）は評価担当者が決めます。未記入のときは参考表示のみで、合否にはしません。
+- 人の目視確認には、`estimate.xlsx` の「レビュー」シートを使います。
+
+### レビュー用AIの評価
+
+```bash
+scripts/reviewer_eval.sh
+```
+
+意味レビューを行うAIが、わざと仕込んだ欠陥を指摘できるかを測ります（AIの利用料がかかります。設計は [docs/reviewer_agent_test_design.md](docs/reviewer_agent_test_design.md)）。
+
+## ディレクトリ構成
+
+| パス | 内容 |
+|---|---|
+| `CLAUDE.md` | AIが常に守る原則 |
+| `.claude/skills/estimate-e2e/` | 見積もりの手順書（`SKILL.md`）と、工程別の詳しい説明（`references/`） |
+| `.claude/agents/estimate-reviewer.md` | 意味レビュー専用AIの定義（読み取り専用） |
+| `config/estimate.example.yaml` | 案件設定の雛形（実際の設定は `estimate.yaml` にコピーして使う） |
+| `config/standards_adapter.yaml` | 基準Excelの読み取り設定（見出しの文字列でシート・表を探す） |
+| `config/claude-estimate.settings.json` | 見積もりモードの権限設定の雛形（runごとに実際のパスで生成） |
+| `standards/` | 基準Excel（読み取り専用の正本） |
+| `inputs/` | 顧客の項目書（読み取り専用） |
+| `src/estimator/` | ツール本体 |
+| `scripts/` | コマンドの入口、起動スクリプト、保護用の自動処理（Hooks）、権限テスト |
+| `schemas/` | AIの提出JSONの定義（JSON Schema） |
+| `evals/` | 評価の設定・期待値 |
+| `tests/` | 自動テスト |
+| `docs/` | 設計書・検証報告・確認事項 |
+| `runs/<run_id>/` | 1回の見積もりの全成果物 |
+
+## 制約・未対応事項
+
+- **対応する入力**: `.xlsx` と `.xlsm`。`.xlsm` のマクロ（VBA）は実行も解析もせず、存在を警告するだけ。`.xls`、パスワード付き、破損ファイルは対応外として報告される。
+- **画像・図形・グラフ**: 画像や図形の位置と図形内の文字だけを検出する。画像の中の文字は読まない。グラフシートは対象外。
+- **大規模な項目書（例: 2,400件）**: AIが全行を読むのではなく、`profile` で繰返し構造を把握し、「何行目から何行目、何行で1項目」と宣言してツールに展開させる。
+- **基準Excelの版**: v0.1（2026-10-10配置）で全項目の読み取りと回帰確認済み。版が変わったら `inspect-standards` で再確認する（[standards/README.md](standards/README.md)）。
+- **保護の強さ**: 既定の保護は「権限ルール＋自動チェック（Hooks）＋実行できるコマンドの制限」で、OSによる書込み禁止ではない。許可するコマンドを増やすと保護が弱まるため、変更した場合は権限テストをやり直す。
+- **`--sandbox` の限界**: sandbox内のコマンドからは、リポジトリ直下への新規ファイル作成や、他のrunへの書込みは防げない（Edit/Writeツールは別途拒否される）。厳密な分離が必要なら、入力・基準・実装を読み取り専用にしたコンテナで実行する（未実装）。
+- **対応OS**: Linux / WSL2 で確認。起動スクリプトとHooksは bash と `.venv/bin/python` が前提で、ネイティブWindowsは未対応。
+- **AIの判断部分**: Claude Codeのセッションが行うため、コマンド1回では完結しない。APIキーで動かす独自サービスは前提にしていない。
+- **正しさは未検証**: 一貫性（形式が違っても同じ結果になるか）は測ったが、人の見積もりや実績工数との一致は測っていない。詳細は [docs/poc_report.md](docs/poc_report.md)。
