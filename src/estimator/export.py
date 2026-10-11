@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
@@ -258,8 +259,142 @@ def export(rd: Path) -> dict:
     ws.column_dimensions["B"].width = 120
 
     atomic_save_workbook(wb, rd / "estimate.xlsx")
+    annotated = export_annotated(rd, est, assess, norm, questions)
     write_text(rd / "summary.md", render_summary(man, est, val, questions, conds, norm, findings, screens))
-    return {"xlsx": str(rd / "estimate.xlsx"), "summary": str(rd / "summary.md")}
+    return {"xlsx": str(rd / "estimate.xlsx"), "summary": str(rd / "summary.md"), "annotated": annotated}
+
+
+DIFFICULTY_LABELS = {"Low": "低", "Mid": "中", "High": "高", "Impossible": "不可能"}
+DIFFICULTY_ORDER = ["Low", "Mid", "High", "Impossible"]
+ANNOTATE_HEADERS = ["自動化難易度", "自動化工数(標準)", "懸念点", "備考"]
+
+
+def _fmt_num(v) -> str:
+    return f"{v:g}" if isinstance(v, (int, float)) else str(v)
+
+
+def _item_annotation(item: dict, cases: list[dict], rows_by_arch: dict, amap: dict, qtext: dict,
+                     owner_of_case: dict, arch_names: dict, item_by_id: dict) -> dict[str, Any]:
+    """原項目1件ぶんの追記内容。値はすべて estimate.json / ai/*.json から転記し、ここで計算しない（合算のみ）。
+
+    備考・懸念点は内部ID（構成案ID・ケースID・質問ID）を出さず、Excelだけで読める日本語にする。
+    構成案が1つのときは構成案名も出さない。
+    """
+    def label(item_id: str) -> str:
+        it = item_by_id[item_id]
+        return f"{it['original_id'] or item_id}「{it['title']}」" if it["title"] else (it["original_id"] or item_id)
+
+    if not cases:
+        return {"difficulty": {}, "effort": {}, "concerns": [], "notes": [f"見積もり対象外（処遇: {item['disposition']}）"]
+                + ([item["reason"]] if item.get("reason") else [])}
+    difficulty: dict[str, str | None] = {}
+    effort: dict[str, float | None] = {}
+    concerns: list[str] = []
+    notes: list[str] = []
+    for arch_id, rows in rows_by_arch.items():
+        pre = f"［{arch_names[arch_id]}］" if arch_names[arch_id] else ""
+        mine = [rows[c["case_id"]] for c in cases if c["case_id"] in rows]
+        diffs = [r["difficulty"] for r in mine if r.get("difficulty")]
+        difficulty[arch_id] = max(diffs, key=DIFFICULTY_ORDER.index) if diffs else None
+        owned = [r for r in mine if owner_of_case[r["case_id"]] == item["item_id"]]
+        counted = [r for r in owned if r["effort"]["std"] is not None]
+        effort[arch_id] = sum(r["effort"]["std"] for r in counted) if counted else None
+        if counted:
+            lo = sum(r["effort"]["low"] for r in counted)
+            hi = sum(r["effort"]["high"] for r in counted)
+            notes.append(f"{pre}工数の幅: 下限{_fmt_num(lo)}〜上限{_fmt_num(hi)}人時")
+        for r in mine:
+            if r["estimate_status"] == "条件付き":
+                notes.append(f"{pre}条件付きの見積もり（懸念点の仮定が成り立つ場合の数字）")
+            elif r["estimate_status"] == "要確認":
+                notes.append(f"{pre}要確認のため難易度・工数は未算定（懸念点の確認事項が決まるまで算定しない）")
+            if r.get("scope") not in (None, "対象内"):
+                notes.append(f"{pre}今回の見積もりの{r['scope']}")
+            if r.get("notes"):
+                notes.append(f"{pre}{r['notes']}")
+            owner = owner_of_case[r["case_id"]]
+            if r["effort"]["std"] is not None and owner != item["item_id"]:
+                notes.append(f"{pre}{label(owner)}などと合わせて1つの見積もりにまとめたため、工数は{label(owner)}の行に記載")
+            a = amap.get((r["case_id"], arch_id), {})
+            concerns += [f"{pre}{c}" for c in a.get("conditions", [])]
+            concerns += [f"{pre}{ax}の仮定: {x}" for ax, v in (a.get("axes") or {}).items()
+                         for x in v.get("assumptions", [])]
+            concerns += [f"{pre}要確認: {qtext.get(q, q)}" for q in a.get("question_ids", [])]
+    for c in cases:
+        others = [i for i in c["source_item_ids"] if i != item["item_id"]]
+        if others and item["item_id"] == owner_of_case[c["case_id"]]:
+            notes.append("次の項目と合わせて1つの見積もりにまとめ、その工数をこの行に記載: "
+                         + "、".join(label(i) for i in others))
+    n_own = [c for c in cases if c["source_item_ids"] == [item["item_id"]]]
+    if len(n_own) > 1:
+        notes.append(f"この項目は{len(n_own)}つの見積もり単位に分解して見積もり（工数は合算）")
+    return {"difficulty": difficulty, "effort": effort,
+            "concerns": list(dict.fromkeys(concerns)), "notes": list(dict.fromkeys(notes))}
+
+
+def export_annotated(rd: Path, est: dict, assess: dict, norm: dict, questions: list[dict]) -> list[str]:
+    """元の項目書の各項目の右隣に、難易度・工数・懸念点・備考の列を足したコピーを annotated/ へ出す。
+
+    元ファイルは変更しない（コピーに追記）。共通作業の工数は項目に紐づかないため含めない。
+    """
+    man = read_json(rd / "manifest.json")
+    case_by_id = {c["case_id"]: c for c in norm["cases"]}
+    amap = {(x["case_id"], arch): x for x in assess["case_assessments"] for arch in x["arch_ids"]}
+    qtext = {q["question_id"]: q["text"] for q in questions}
+    rows_by_arch = {a["arch_id"]: {c["case_id"]: c for c in a["cases"]} for a in est["architectures"]}
+    multi = len(rows_by_arch) > 1
+    arch_names = {a["arch_id"]: (a["name"] if multi else "") for a in est["architectures"]}
+    item_by_id = {i["item_id"]: i for i in norm["source_items"]}
+    cases_by_item: dict[str, list[dict]] = {}
+    for c in norm["cases"]:
+        for sid in c["source_item_ids"]:
+            cases_by_item.setdefault(sid, []).append(c)
+    # 統合ケース（複数項目→1ケース）の工数は先頭の項目にだけ計上し、二重に数えない
+    owner_of_case = {c["case_id"]: c["source_item_ids"][0] for c in norm["cases"] if c["source_item_ids"]}
+    header_rows = {r["region_id"]: r.get("header_rows") or [] for r in norm["regions"]}
+    outputs: list[str] = []
+    for inp in man["inputs"]:
+        src = Path(inp["path"])
+        if not src.exists() or src.suffix.lower() not in (".xlsx", ".xlsm"):
+            continue
+        wb = load_workbook(src)  # マクロは保持せず(.xlsx出力)、実行もしない
+        placed: dict[str, int] = {}  # シート名 -> 追記開始列
+        headers_done: set[str] = set()
+        for it in norm["source_items"]:
+            ref = next((r for r in it["refs"] if r["workbook_id"] == inp["workbook_id"]), None)
+            if ref is None or ref["sheet"] not in wb.sheetnames:
+                continue
+            ws = wb[ref["sheet"]]
+            col0 = placed.setdefault(ref["sheet"], ws.max_column + 1)
+            first_row = int(re.search(r"\d+", ref["range"].split(":")[0]).group())
+            ann = _item_annotation(it, cases_by_item.get(it["item_id"], []), rows_by_arch, amap, qtext, owner_of_case,
+                                  arch_names, item_by_id)
+            archs = list(rows_by_arch)
+            diff = "\n".join((f"［{arch_names[a]}］" if multi else "") + (DIFFICULTY_LABELS.get(ann["difficulty"].get(a)) or "判定不可")
+                             for a in archs) if ann["difficulty"] else None
+            eff = "\n".join((f"［{arch_names[a]}］" if multi else "") + ("" if ann["effort"].get(a) is None else _fmt_num(ann["effort"][a]))
+                            for a in archs) if ann["effort"] else None
+            if not multi and ann["effort"]:
+                eff = ann["effort"][archs[0]]
+            values = [diff, eff, ann["concerns"], ann["notes"]]
+            for j, v in enumerate(values):
+                c = _cell(ws, first_row, col0 + j, v)
+                c.alignment = Alignment(wrap_text=True, vertical="top")
+            hdr = next((max(header_rows.get(rid, []) or [0]) for rid in it["region_ids"] if header_rows.get(rid)), 0)
+            if hdr and ref["sheet"] not in headers_done and hdr < first_row:
+                headers_done.add(ref["sheet"])
+                for j, h in enumerate(ANNOTATE_HEADERS):
+                    c = _cell(ws, hdr, col0 + j, h)
+                    c.font = Font(bold=True)
+                    c.fill = HEADER_FILL
+                    c.alignment = Alignment(wrap_text=True, vertical="top")
+        for sheet, col0 in placed.items():
+            for j, w in enumerate((14, 16, 40, 40)):
+                wb[sheet].column_dimensions[get_column_letter(col0 + j)].width = w
+        out = rd / "annotated" / f"{src.stem}_見積付き.xlsx"
+        atomic_save_workbook(wb, out)
+        outputs.append(str(out))
+    return outputs
 
 
 SCREEN_BASIS_LABELS = {"inferred": "項目書から推定", "observed": "サイト調査で確認"}

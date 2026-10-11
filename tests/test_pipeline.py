@@ -145,6 +145,15 @@ def test_full_pipeline(run, capsys):
     row2 = {h: c.value for h, c in zip(hdr, ws[3])}  # C-002
     assert row2["case_id"] == "C-002" and row2["標準"] is None and row2["estimate_status"] == "要確認"
     assert (rd / "summary.md").read_text().startswith("# 見積もり結果")
+    ann = list((rd / "annotated").glob("*_見積付き.xlsx"))
+    assert len(ann) == 1
+    aws = load_workbook(ann[0])["テスト項目"]
+    hdr_row = [c.value for c in aws[4]]
+    assert hdr_row[-4:] == ["自動化難易度", "自動化工数(標準)", "懸念点", "備考"]
+    t1, t2 = [c.value for c in aws[5]][-4:], [c.value for c in aws[7]][-4:]
+    assert t1[0] == "中" and t1[1] == 5.0  # T-1 → C-001 Mid 標準5
+    assert t2[0] is None or t2[1] is None  # T-2 → C-002 要確認（工数は空欄、0にしない）
+    assert "要確認: ログイン方法は？" in t2[2]
     assert "- 画面一覧: 2画面（項目書から推定 2）" in (rd / "summary.md").read_text()
     assert [sha256_file(p) for p in srcs] == before
 
