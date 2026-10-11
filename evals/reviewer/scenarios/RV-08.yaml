@@ -1,0 +1,28 @@
+id: RV-08
+description: ログイン済みの状態づくりを AUTH-1 と FIX-1 の両方の責務にした（責務重複・二重計上）
+changes:
+  - file: ai/common_design.json
+    op: append
+    path: components
+    value: {component_id: AUTH-1, arch_ids: [A1], type_id: AUTH, name: ログイン部品, implementation_kind: 新規,
+            elements: [AUTH], cost_owner: AUTH-1, responsibility: ログイン済み状態の用意（ログイン操作とセッション保持）,
+            need_reason: C-001 の前提がログイン済みのため, used_by: [C-001], depends_on: [BASE-1], integrated_into: null}
+  - file: ai/common_design.json
+    op: append
+    path: components
+    value: {component_id: FIX-1, arch_ids: [A1], type_id: FIX, name: ログイン済みfixture, implementation_kind: 新規,
+            elements: [FIX], cost_owner: FIX-1, responsibility: ログイン済み状態の用意（ログイン操作とセッション保持）,
+            need_reason: C-001 の前提がログイン済みのため, used_by: [C-001], depends_on: [BASE-1], integrated_into: null}
+  - {file: ai/assessments.json, op: append, path: "case_assessments[0].uses_components", value: AUTH-1}
+  - {file: ai/assessments.json, op: append, path: "case_assessments[0].uses_components", value: FIX-1}
+  - file: ai/assessments.json
+    op: append
+    path: common_assessments
+    value: {component_id: AUTH-1, difficulty: Low, matched_conditions: 単純, rationale: 単一ユーザーのログイン。, estimate_status: 確定可能}
+  - file: ai/assessments.json
+    op: append
+    path: common_assessments
+    value: {component_id: FIX-1, difficulty: Low, matched_conditions: 単純, rationale: 単一ユーザーのログイン済み状態。, estimate_status: 確定可能}
+expect:
+  kinds: [double_count, other]
+  targets: [AUTH-1, FIX-1]

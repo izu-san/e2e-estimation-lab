@@ -1,0 +1,10 @@
+id: RV-01
+description: 非表示シートの「旧版の項目」を、確認事項にせず対象外にした（項目らしい行の見落とし）
+changes:
+  - {file: ai/normalized_cases.json, op: set, path: "regions[3].disposition", value: not_test}
+  - {file: ai/normalized_cases.json, op: set, path: "regions[3].reason", value: 旧版のメモなので対象外}
+  - {file: ai/normalized_cases.json, op: remove, path: "regions[3].question_ids"}
+  - {file: ai/questions.json, op: set, path: "items[0].targets", value: [C-002]}
+expect:
+  kinds: [missing_item, question_missing, status]
+  targets: [W1-S2-R001, Q1]

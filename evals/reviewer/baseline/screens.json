@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "screens": [
+    {
+      "screen_id": "PG-List",
+      "name": "商品一覧",
+      "url": null,
+      "basis": "inferred",
+      "evidence": "テスト項目!C5 に「商品一覧を開く」の操作がある",
+      "refs": [
+        {
+          "workbook_id": "W1",
+          "sheet": "テスト項目",
+          "range": "C5"
+        }
+      ],
+      "operated_by": [
+        "C-001"
+      ],
+      "checked_by": []
+    },
+    {
+      "screen_id": "PG-Detail",
+      "name": "商品詳細",
+      "url": null,
+      "basis": "inferred",
+      "evidence": "テスト項目!C6・D6 に「商品を選ぶ」と詳細表示の確認がある",
+      "refs": [
+        {
+          "workbook_id": "W1",
+          "sheet": "テスト項目",
+          "range": "C6"
+        }
+      ],
+      "operated_by": [],
+      "checked_by": [
+        "C-001"
+      ]
+    }
+  ],
+  "not_counted": []
+}

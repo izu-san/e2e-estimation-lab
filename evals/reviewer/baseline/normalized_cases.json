@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "regions": [
+    {
+      "region_id": "W1-S1-R001",
+      "role": "description",
+      "disposition": "not_test",
+      "reason": "説明文"
+    },
+    {
+      "region_id": "W1-S1-R002",
+      "role": "test_table",
+      "disposition": "parsed",
+      "header_rows": [
+        4
+      ],
+      "reason": "表"
+    },
+    {
+      "region_id": "W1-S1-R003",
+      "role": "reference",
+      "disposition": "not_test",
+      "reason": "参考行"
+    },
+    {
+      "region_id": "W1-S2-R001",
+      "role": "other",
+      "disposition": "needs_question",
+      "reason": "非表示シート",
+      "question_ids": [
+        "Q1"
+      ]
+    }
+  ],
+  "source_items": [
+    {
+      "item_id": "T-1",
+      "original_id": "T-1",
+      "id_assigned": false,
+      "region_ids": [
+        "W1-S1-R002"
+      ],
+      "refs": [
+        {
+          "workbook_id": "W1",
+          "sheet": "テスト項目",
+          "range": "A5:D6"
+        }
+      ],
+      "title": "商品詳細",
+      "step_count": 2,
+      "expected_count": 2,
+      "data_pattern_count": 1,
+      "disposition": "mapped",
+      "duplicate_of": null,
+      "reason": "",
+      "inheritance": [
+        {
+          "ref": {
+            "workbook_id": "W1",
+            "sheet": "テスト項目",
+            "range": "B6"
+          },
+          "from_ref": {
+            "workbook_id": "W1",
+            "sheet": "テスト項目",
+            "range": "B5"
+          },
+          "reason": "結合セル"
+        }
+      ]
+    },
+    {
+      "item_id": "T-2",
+      "original_id": "T-2",
+      "id_assigned": false,
+      "region_ids": [
+        "W1-S1-R002"
+      ],
+      "refs": [
+        {
+          "workbook_id": "W1",
+          "sheet": "テスト項目",
+          "range": "A7:D7"
+        }
+      ],
+      "title": "ログイン",
+      "step_count": 1,
+      "expected_count": 1,
+      "data_pattern_count": 1,
+      "disposition": "mapped",
+      "duplicate_of": null,
+      "reason": "非表示行だが項目"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "C-001",
+      "title": "商品詳細表示",
+      "source_item_ids": [
+        "T-1"
+      ],
+      "relation": "one_to_one",
+      "summary": "商品一覧を開き、商品を選んで詳細表示を確認する",
+      "steps": [
+        "一覧",
+        "選択"
+      ],
+      "expected": [
+        "一覧",
+        "詳細"
+      ],
+      "step_count": 2,
+      "assertion_count": 2,
+      "data_pattern_count": 1
+    },
+    {
+      "case_id": "C-002",
+      "title": "ログイン画面遷移",
+      "source_item_ids": [
+        "T-2"
+      ],
+      "relation": "one_to_one",
+      "summary": "ログインボタンを押してログイン画面への遷移を確認する",
+      "steps": [
+        "押す"
+      ],
+      "expected": [
+        "画面"
+      ],
+      "step_count": 1,
+      "assertion_count": 1,
+      "data_pattern_count": 1
+    }
+  ]
+}
