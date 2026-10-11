@@ -163,7 +163,7 @@ scripts/estimator status --run <run_id>
 
 - **stale（再確認が必要）**: 上流の成果物（項目整理など）が変わったため、下流の工程の前提が古くなった状態。該当工程の `validate-stage` からやり直します。共通設計を変えたら採点も再確認が必要です。
 - **modified**: 検証後に `ai/*.json` を手で変更した状態。同様にやり直します。
-- **SOURCE_CHANGED で止まった**: 実行開始後に入力・基準・設定が変更された。結果が食い違うので、新しいrunを作り直してください。
+- **SOURCE_CHANGED が出た**: 実行開始後に入力・基準・設定が変更された。`extract` は拒否し、`validate` は「処理失敗」にします。結果が食い違うので、新しいrunを作り直してください。
 - **failed_repair_limit**: 修正回数の上限（初回＋2回）に達した工程。エラーを残したまま計算・出力まで進み、結果には「検証失敗」と記録されます。
 
 ## 結果の見方（`runs/<run_id>/`）
@@ -173,7 +173,7 @@ scripts/estimator status --run <run_id>
 | ファイル | 内容 |
 |---|---|
 | `summary.md` | 結果の要約 |
-| `estimate.xlsx` | 詳細。サマリー、個別ケース、共通作業、原項目との対応、確認事項、意味レビュー、人の判定記入用の「レビュー」シート、検証結果、実行条件 |
+| `estimate.xlsx` | 詳細。サマリー、個別ケース、共通作業、原項目との対応、画面一覧、確認事項、意味レビュー、人の判定記入用の「レビュー」シート、検証結果、実行条件 |
 | `validation.json` | 検証結果と状態 |
 
 その他の成果物:
@@ -185,6 +185,8 @@ scripts/estimator status --run <run_id>
 | `raw_workbook.json` / `source_inventory.json` / `views/*.md` | 項目書の全セル、シート・領域の一覧と読み取り時の警告、AIが読むための座標つきテキスト |
 | `ai/*.json` | AIの判断結果（項目整理、画面一覧、共通設計、確認事項、採点、意味レビュー） |
 | `estimate.json` | ツールが計算した工数（構成案別に、下限・標準・上限） |
+| `survey/` | 対象サイトの調査結果（調査した案件のみ） |
+| `review/` | 意味レビューの記録（`ai_review.json`、`human_review.json`） |
 | `stage_state.json` / `logs/` | 工程の状態とコマンド履歴 |
 
 ### 状態の言葉
@@ -274,6 +276,7 @@ uv run pytest -q
 | `test_review_and_coverage.py` | 意味レビューの指摘と対応の記録、画面一覧と各工程の整合 |
 | `test_calc_version.py` | 計算規則の版の上げ忘れ検出 |
 | `test_guardrails.py` | 保護機能（書込み拒否・スキーマ通知・見積もり設定の生成） |
+| `test_survey.py` | 対象サイトの調査（URLの形の集約、除外URL、調査結果と画面一覧の照合、閲覧できない案件での拒否） |
 | `test_reviewer_eval.py` | レビュー用AI評価の採点処理（オフライン部分） |
 
 ### 権限テスト（実機）

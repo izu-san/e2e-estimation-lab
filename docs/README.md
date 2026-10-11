@@ -46,6 +46,7 @@
 | 結果が正しいか判断したい | [review_guide.md](review_guide.md) |
 | 数字や判定の根拠を知りたい | [glossary.md](glossary.md)（ルール番号の索引）、[standards_questions.md](standards_questions.md) |
 | 基準（工数・閾値・ルール）を変えたい | [standards_update.md](standards_update.md) |
+| AIのモデルを更新した | [evaluation_guide.md](evaluation_guide.md)（「モデルを更新するとき」） |
 | 結果が毎回少し違う理由を知りたい | [faq.md](faq.md)、[poc_report.md](poc_report.md) |
 | コードを直したい | [architecture.md](architecture.md) |
 | 評価結果の意味を知りたい | [evaluation_guide.md](evaluation_guide.md) |

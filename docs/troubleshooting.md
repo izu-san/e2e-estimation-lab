@@ -21,7 +21,7 @@ AIによる修正が上限（初回＋2回）に達した工程は `failed_repai
 
 | コード | 意味 | 対処 |
 |---|---|---|
-| `SOURCE_CHANGED` | 実行開始後に、入力の項目書・基準Excel・設定のいずれかが変わった | そのrunは続けられない。新しいrunを作り直す（`init-run` か、保護付きなら `start-estimate-session.sh`） |
+| `SOURCE_CHANGED` | 実行開始後に、入力の項目書・基準Excel・設定のいずれかが変わった（`extract` は拒否し、`validate` は「処理失敗」にする） | そのrunは続けられない。新しいrunを作り直す（`init-run` か、保護付きなら `start-estimate-session.sh`） |
 | `RECOMPUTE_MISMATCH` | 再計算した結果が `estimate.json` と合わない。`estimate.json` を手で編集した、または上流の成果物が変わった | `scripts/estimator calculate --run <run_id>` を再実行する。手で編集しない |
 | `RULE_VERSION_CHANGED` | 計算規則の版が、そのrunを作った時と違う（ツールを改修した後に古いrunを見ている） | AIの成果物はそのままでよい。`calculate` → `validate` → `export` を再実行する |
 | `SURVEY_MISSING` | 案件設定が `site.access: browsable` なのに、サイト調査の結果が無い | `scripts/estimator survey --run <run_id>` を実行してから、画面一覧の検証をやり直す。調査できない案件なら、設定を `unavailable` にする |

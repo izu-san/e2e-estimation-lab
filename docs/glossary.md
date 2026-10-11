@@ -160,6 +160,7 @@
 | `ai/assessments.json` | 5軸の採点と共通部品の難易度 |
 | `ai/semantic_review.json` | 意味レビューの指摘と対応 |
 | `survey/` | 対象サイトの調査結果 |
+| `review/` | 意味レビューの記録（AI: `ai_review.json`、人: `human_review.json`） |
 | `views/*.md` | AIが読むための、座標つきテキスト |
 | `standards.json`, `standards_text/` | 基準Excelから実行時に作った参照値と文章 |
 

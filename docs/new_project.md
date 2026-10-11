@@ -72,10 +72,11 @@ site:
   base_url: https://対象サイトのURL/
   survey:
     max_pages: 40                                          # 調べるページ数の上限
-    exclude_url_patterns: [logout, delete, remove, signout]  # 開かないURLの部分文字列
+    exclude_url_patterns: [logout, delete, remove, signout]  # 開かないURLパスの正規表現（大文字小文字は区別しない）
 ```
 
-- `exclude_url_patterns` には、開くだけで状態が変わる恐れのあるURL（ログアウト、削除など）を入れます。案件のサイトに合わせて追加してください。
+- `exclude_url_patterns` には、開くだけで状態が変わる恐れのあるURLパスを正規表現で入れます（ログアウト、削除など）。省略すると既定の `logout`、`delete`、`remove`、`signout` が使われます。案件のサイトに合わせて追加してください。
+- `max_pages` は1〜200の整数です。
 - 追加の準備として Node.js 18以上と、調査ツールの導入が必要です（README の「セットアップ」）。
 - 調査してよいかは、**案件ごとに人が判断**してください（顧客の許可、アクセス負荷など）。この仕組みは、検証環境での操作（登録・送信）を許していません。
 
@@ -90,12 +91,13 @@ site:
 | 項目 | 意味 | 変更が必要な場面 |
 |---|---|---|
 | `standards.cases` / `common` | 使う基準Excel（個別・共通）のパス | 基準の版やファイル名が違うとき |
-| `target.automation_tool` / `language` / `browsers` / `environments` | 自動化の前提（ツール、言語、ブラウザー、環境数） | 顧客の指定があるとき。基準の標準環境（Chromium 1種）以外は、仮定や別見積になる |
-| `architecture.pom` | ページオブジェクトを使うか。`enabled` / `disabled` / `compare` / `unspecified` | 指定があれば設定する。`compare` は、使う場合と使わない場合を並べて見積もる。`unspecified` は、1つの構成案を作り、採用した前提を仮定として記録する |
-| `architecture.existing_assets` | 既存の自動化資産の有無（`unknown` など） | 既存資産があれば、流用の扱いが変わる（適合性が確認できた場合だけ新規実装分が0になる） |
+| `target.automation_tool` / `language` / `browsers` / `environments` | 自動化の前提（ツール、言語、ブラウザー、環境数）。実行の記録（`manifest.json`）に残る。**ツールはこの値で動作を変えない**（形式チェックだけ） | 顧客の指定があるとき。ブラウザーの扱いは、項目書の内容と基準（標準環境はChromium 1種）に基づいてAIが判断する |
+| `architecture.pom` | ページオブジェクトを使うか。`enabled` / `disabled` / `compare` / `unspecified`。AIが構成案を作るときに参照する（Skillの手順） | 指定があれば設定する。`compare` は、使う場合と使わない場合の複数の構成案を作る。`unspecified` は、1つの構成案を作り、採用した前提を仮定として記録する |
+| `architecture.existing_assets` | 既存の自動化資産の有無を示す文字列（既定は `unknown`）。実行の記録に残るだけで、ツールの動作は変えない | 既存資産があるときは、設定だけに頼らず、項目書や質問に残す。流用の扱いは、適合性が確認できた場合だけ新規実装分が0になる、という基準のルールに従う |
 | `scope.excluded_type_ids` | 対象外にする共通作業の種別ID（例: `[CI]`） | 範囲外と明確なもの。除外したものは「対象外」として記録される |
-| `uncertainty` | 不明点の扱い | 通常は変更しない（不明点は質問に残して進める） |
-| `execution.max_repair_attempts` | AIが検証エラーを直す回数の上限（既定2） | 通常は変更しない |
+| `uncertainty` | 不明点の扱い（`allow_explicit_assumptions`、`on_unresolved`: `continue_as_pending` / `stop`） | 通常は変更しない（不明点は質問に残して進める） |
+| `execution.max_repair_attempts` | AIが検証エラーを直す回数の上限（0〜10、既定2） | 通常は変更しない |
+| `execution.chunk_rows` | AIが読む表示を分割する行数（10以上、既定80） | 大きな項目書で表示が長すぎるとき |
 | `site` | 対象サイトの調査（4章） | 調査するとき |
 
 - **変更しない項目**: `execution.site_interaction` は `false` のみ許可されています（サイトへの操作はしない）。
@@ -116,7 +118,7 @@ site:
 見積もりで注意すること:
 
 - 繰り返し（データ違い・ブラウザー違い）を、**件数分の別実装として満額計上しない**。パラメータ化やブラウザー差分として整理します。
-- 基準の標準環境（Chromium 1種）以外のブラウザーは、仮定または別見積になります。
+- 基準の標準環境（Chromium 1種）以外のブラウザーは、基準のルール（COST-06）に従い、AIが仮定または別見積として扱います。
 - 「想定」「未確認」と書かれた期待結果は、事実として扱わず、質問や仮定に残ります。
 - 整理後のケース数は、原項目の件数より少なくなることがあります。件数そのものではなく、**対応関係とまとめ方の理由**を人が確認してください。
 - 画像・図形の中の文字、グラフシートは読み取れません。画像の内容に依存する項目は質問に残ります。
