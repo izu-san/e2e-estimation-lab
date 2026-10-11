@@ -6,6 +6,8 @@ Excelのテスト項目書を読み込み、**基準Excelに書かれた判定�
 このうち「読んで判断する」部分をAI（Claude Code）が、「数える・計算する・検算する」部分をPythonのツールが担当します。
 
 - **はじめに読む**: [docs/handover.md](docs/handover.md)（最初の1時間の手順）
+- 新しい案件に使う: [docs/new_project.md](docs/new_project.md)
+- 用語集: [docs/glossary.md](docs/glossary.md)
 - 結果のレビュー: [docs/review_guide.md](docs/review_guide.md)
 - エラー対処: [docs/troubleshooting.md](docs/troubleshooting.md)
 - 基準Excelの変更: [docs/standards_update.md](docs/standards_update.md)
@@ -315,7 +317,7 @@ scripts/reviewer_eval.sh
 | `evals/` | 評価の設定・期待値 |
 | `tests/` | 自動テスト |
 | `docs/` | 設計書・検証報告・確認事項 |
-| `runs/<run_id>/` | 1回の見積もりの全成果物 |
+| `runs/<run_id>/` | 1回の見積もりの全成果物（Git管理外。不要になったら削除してよい。残す場合の扱いは [docs/handover.md](docs/handover.md)） |
 
 ## 制約・未対応事項
 

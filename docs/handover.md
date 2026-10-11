@@ -81,12 +81,23 @@ scripts/start-estimate-session.sh --input inputs/AutomationExercise_01_詳細形
 [review_guide.md](review_guide.md) の手順で、`estimate.xlsx` の「レビュー」シートに判定を記入してみてください。
 ここが、この仕組みで人が担う中心的な仕事です。
 
+## 4.5 結果の保管と削除
+
+`runs/` はGit管理外で、実行のたびに増えます。**不要になったら削除して構いません。**
+
+- 残したい結果は、削除する前に `summary.md` と `estimate.xlsx` を別の場所に保存してください。
+- 案件の成果として残すなら、`manifest.json`（入力・基準・設定のハッシュと版の記録）も一緒に保存してください。どの資料・基準から作った結果かを後から示せます。
+- 削除すると元に戻せません。保存し忘れがないか確認してから消してください。
+- 途中で止まったrunを再開する予定があるものは、再開が終わるまで消さないでください。
+
 ## 5. 困ったときは
 
 | 状況 | 見る場所 |
 |---|---|
 | エラーコードの意味と対処 | [troubleshooting.md](troubleshooting.md) |
 | 基準Excelを変えたい | [standards_update.md](standards_update.md) |
+| 新しい案件に適用する | [new_project.md](new_project.md) |
+| 用語がわからない | [glossary.md](glossary.md) |
 | コマンドの使い方 | [README.md](../README.md) の「コマンド一覧」 |
 | なぜこの設計なのか | [設計書](ClaudeCode_E2E_Estimator_Implementation_Guide_v1.1.md) |
 | 精度や残っている課題 | [poc_report.md](poc_report.md) |
