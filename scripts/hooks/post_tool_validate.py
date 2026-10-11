@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 from _common import ROOT, active_run_dir, emit, read_input  # noqa: E402
 
-KNOWN = {"normalized_cases.json": "normalized_cases", "common_design.json": "common_design",
+KNOWN = {"normalized_cases.json": "normalized_cases", "screens.json": "screens", "common_design.json": "common_design",
          "assessments.json": "assessments", "questions.json": "questions"}
 
 

@@ -1,0 +1,7 @@
+{
+  "rule_versions": {
+    "cases": "case-rule-2",
+    "common": "common-rule-2"
+  },
+  "architectures_sha256": "342a7959e96f6c9867fdae4134f654b143fc59242912cde61bf1c6594b0bc643"
+}

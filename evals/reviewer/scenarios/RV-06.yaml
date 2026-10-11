@@ -1,0 +1,8 @@
+id: RV-06
+description: 手順が2つのT-1を5手順と数えた（手順数の誤カウント）
+changes:
+  - {file: ai/normalized_cases.json, op: set, path: "source_items[0].step_count", value: 5}
+  - {file: ai/normalized_cases.json, op: set, path: "cases[0].step_count", value: 5}
+expect:
+  kinds: [other, scoring]
+  targets: [T-1, C-001]

@@ -24,6 +24,19 @@
           "status": {"enum": ["open", "assumed", "resolved"]}
         }
       }
+    },
+    "premise_reviews": {
+      "description": "説明・参考領域（資料情報・前提・未確定事項）の行のうち、質問・仮定にしなかった行と理由。質問にした行は質問の refs に入れる",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "ref": {"$ref": "defs.schema.json#/$defs/ref"},
+          "reason": {"type": "string", "minLength": 1, "description": "見積もりへの影響がない、または設定・共通設計に反映済みである理由"}
+        }
+      }
     }
   }
 }

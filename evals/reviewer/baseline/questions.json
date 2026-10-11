@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "items": [
+    {
+      "question_id": "Q1",
+      "kind": "question",
+      "targets": [
+        "C-002",
+        "W1-S2-R001"
+      ],
+      "text": "ログイン方法は？",
+      "impact": "C-002が要確認",
+      "status": "open"
+    }
+  ]
+}

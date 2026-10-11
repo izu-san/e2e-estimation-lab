@@ -53,6 +53,14 @@ def normalized():
     }
 
 
+def screens(cases=("C-001", "C-002")):
+    def sc(sid, rng, op):
+        return {"screen_id": sid, "name": sid, "url": None, "basis": "inferred", "evidence": "手順に遷移の記述",
+                "refs": [REF(rng)], "operated_by": op, "checked_by": []}
+    return {"schema_version": 1, "screens": [sc("PG-List", "C5", list(cases[:1])), sc("PG-Detail", "C6", list(cases[1:]))],
+            "not_counted": []}
+
+
 def design():
     base = {"responsibility": "r", "need_reason": "n", "used_by": [], "depends_on": [], "integrated_into": None}
     return {"schema_version": 1,
@@ -103,6 +111,7 @@ def run(tmp_path, capsys):
     assert run_cli(capsys, "extract", "--run", "t1")[0] == 0
     rd = Path(out["run_dir"])
     write_json(rd / "ai/normalized_cases.json", normalized())
+    write_json(rd / "ai/screens.json", screens())
     write_json(rd / "ai/common_design.json", design())
     write_json(rd / "ai/assessments.json", assessments())
     write_json(rd / "ai/questions.json", questions())
@@ -113,7 +122,7 @@ def test_full_pipeline(run, capsys):
     rd, srcs = run
     from estimator.io_utils import sha256_file
     before = [sha256_file(p) for p in srcs]
-    for st in ("normalize", "common_design", "questions", "assessments"):  # questionsは採点が参照するため先
+    for st in ("normalize", "screens", "common_design", "questions", "assessments"):  # questionsは採点が参照するため先
         code, out = run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)
         assert code == 0, out
     code, out = run_cli(capsys, "calculate", "--run", "t1")
@@ -130,18 +139,19 @@ def test_full_pipeline(run, capsys):
     code, out = run_cli(capsys, "export", "--run", "t1")
     assert code == 0, out
     wb = load_workbook(rd / "estimate.xlsx")
-    assert {"サマリー", "個別ケース", "共通作業", "原項目対応", "確認事項", "検証結果", "実行条件", "レビュー"} <= set(wb.sheetnames)
+    assert {"サマリー", "個別ケース", "共通作業", "原項目対応", "確認事項", "検証結果", "実行条件", "レビュー", "画面一覧"} <= set(wb.sheetnames)
     ws = wb["個別ケース"]
     hdr = [c.value for c in ws[1]]
     row2 = {h: c.value for h, c in zip(hdr, ws[3])}  # C-002
     assert row2["case_id"] == "C-002" and row2["標準"] is None and row2["estimate_status"] == "要確認"
     assert (rd / "summary.md").read_text().startswith("# 見積もり結果")
+    assert "- 画面一覧: 2画面（項目書から推定 2）" in (rd / "summary.md").read_text()
     assert [sha256_file(p) for p in srcs] == before
 
 
 def test_hand_edited_estimate_is_rejected(run, capsys):
     rd, _ = run
-    for st in ("normalize", "common_design", "assessments"):
+    for st in ("normalize", "screens", "common_design", "assessments"):
         run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)
     run_cli(capsys, "calculate", "--run", "t1")
     est = json.loads((rd / "estimate.json").read_text())
@@ -179,7 +189,7 @@ def test_assessments_require_questions_first(run, capsys):
 
 def test_mark_review_context(run, capsys):
     rd, _ = run
-    for st in ("normalize", "common_design", "questions", "assessments"):
+    for st in ("normalize", "screens", "common_design", "questions", "assessments"):
         assert run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)[0] == 0
     assert run_cli(capsys, "calculate", "--run", "t1")[0] == 0
     write_json(rd / "ai/semantic_review.json", {"schema_version": 1, "reviewer": "ai", "findings": []})
@@ -191,6 +201,20 @@ def test_mark_review_context(run, capsys):
     assert code == 0 and out["semantic_review_status"] == "AIレビュー済"
 
 
+def test_mark_review_refreshes_exported_outputs(run, capsys):
+    rd, _ = run
+    for st in ("normalize", "screens", "common_design", "questions", "assessments"):
+        assert run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)[0] == 0
+    assert run_cli(capsys, "calculate", "--run", "t1")[0] == 0
+    assert run_cli(capsys, "validate", "--run", "t1")[0] == 0
+    assert run_cli(capsys, "export", "--run", "t1")[0] == 0
+    assert "未実施" in (rd / "summary.md").read_text(encoding="utf-8")
+    write_json(rd / "ai/semantic_review.json", {"schema_version": 1, "reviewer": "ai", "findings": []})
+    assert run_cli(capsys, "mark-review", "--run", "t1", "--by", "ai", "--context", "independent")[0] == 0
+    assert json.loads((rd / "validation.json").read_text(encoding="utf-8"))["status"]["semantic_review_status"] == "AIレビュー済"
+    assert "semantic_review_status: AIレビュー済" in (rd / "summary.md").read_text(encoding="utf-8")
+
+
 def test_semantic_review_validation(run, capsys):
     rd, _ = run
     def review(findings):
@@ -199,6 +223,7 @@ def test_semantic_review_validation(run, capsys):
     ok = {"target": "C-001", "related": ["C-002"], "kind": "scoring", "message": "根拠が弱い", "suggestion": "再確認"}
     assert review([ok])[0] == 0
     assert review([{**ok, "target": "overall", "related": []}])[0] == 0
+    assert review([{**ok, "target": "PG-List", "related": ["PG-Detail"]}])[0] == 0  # 画面一覧の指摘は screen_id で指せる
     code, out = review([{**ok, "target": "C-999"}])
     assert code == 1 and out["errors"][0]["code"] == "UNKNOWN_TARGET"
     code, out = review([{**ok, "related": ["PAGE-xxx"]}])
@@ -250,6 +275,21 @@ def test_double_count_detected(run, capsys):
     assert code == 1 and any(e["code"] == "DOUBLE_COUNT" for e in out["errors"])
 
 
+def test_text_case_not_in_used_by_warns(run, capsys):
+    rd, _ = run
+    d = design()
+    d["components"][1]["need_reason"] = "C-001とC-002が利用"  # used_by は C-001 のみ
+    write_json(rd / "ai/common_design.json", d)
+    code, out = run_cli(capsys, "validate-stage", "--run", "t1", "--stage", "common_design")
+    assert code == 0
+    w = [x for x in out["warnings"] if x["code"] == "TEXT_CASE_NOT_IN_USED_BY"]
+    assert len(w) == 1 and "C-002" in w[0]["message"]
+    d["components"][1]["need_reason"] = "C-001が利用"
+    write_json(rd / "ai/common_design.json", d)
+    code, out = run_cli(capsys, "validate-stage", "--run", "t1", "--stage", "common_design")
+    assert not [x for x in out["warnings"] if x["code"] == "TEXT_CASE_NOT_IN_USED_BY"]
+
+
 def test_duplicate_requires_reason_and_target(run, capsys):
     rd, _ = run
     n = normalized()
@@ -273,7 +313,7 @@ def test_bad_refs_detected(run, capsys):
 
 def test_source_change_detected_and_stale(run, capsys, tmp_path):
     rd, (c, m, cust) = run
-    for st in ("normalize", "common_design", "assessments"):
+    for st in ("normalize", "screens", "common_design", "assessments"):
         run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)
     run_cli(capsys, "calculate", "--run", "t1")
     # 共通設計を変更 → 下流（採点・計算）が無効化される
@@ -423,3 +463,32 @@ def test_summary_mapping_line_shows_split_and_merged():
     (line,) = _mapping_lines(norm)
     assert "原項目 3件 → 見積もりケース 3件" in line and "A" in line and "C-3" in line
     assert _mapping_lines(None) == []
+
+
+def test_duplicate_trace_and_data_definition_and_ambiguity_warnings(run, capsys):
+    rd, _ = run
+    n = normalized()
+    n["source_items"].append({**n["source_items"][1], "item_id": "DUP-1", "original_id": None, "id_assigned": True,
+                              "disposition": "merged_duplicate", "duplicate_of": n["source_items"][1]["item_id"],
+                              "reason": "完全一致"})
+    write_json(rd / "ai/normalized_cases.json", n)
+    code, errors, warns = _stage(capsys, "normalize")
+    assert code == 0 and "DUPLICATE_NOT_TRACED" in warns
+    for c in n["cases"]:
+        if n["source_items"][1]["item_id"] in c["source_item_ids"]:
+            c["notes"] = "DUP-1 を重複として統合"
+    n["regions"][0]["role"] = "data_definition"
+    write_json(rd / "ai/normalized_cases.json", n)
+    code, errors, warns = _stage(capsys, "normalize")
+    assert "DUPLICATE_NOT_TRACED" not in warns
+
+
+def test_ambiguity_axis_assumption_warns(run, capsys):
+    rd, _ = run
+    a = assessments()
+    ax = a["case_assessments"][0]["axes"]["AX-04"]
+    ax["score"] = 1
+    ax["assumptions"] = ["仮定"]
+    write_json(rd / "ai/assessments.json", a)
+    _, _, warns = _stage(capsys, "assessments")
+    assert "AXIS_ASSUMPTION_SCORE" in warns

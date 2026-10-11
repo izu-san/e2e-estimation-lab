@@ -180,6 +180,8 @@ def calculate(standards: dict, normalized: dict, design: dict, assessments: dict
     comps_by_id = {c["component_id"]: c for c in design["components"]}
     ca_by_id = {c["component_id"]: c for c in assessments["common_assessments"]}
     case_by_id = {c["case_id"]: c for c in normalized["cases"]}
+    pending_parts = sum(len(i.get("pending_parts") or []) for i in normalized["source_items"]
+                        if i["disposition"] == "mapped")
 
     archs = []
     for arch in design["architectures"]:
@@ -202,6 +204,7 @@ def calculate(standards: dict, normalized: dict, design: dict, assessments: dict
         cc, mc = _counts(case_rows), _counts(comp_rows)
         unresolved = sum(cc.get(k, 0) + mc.get(k, 0) for k in ("pending", "uncomputed", "unassessed", "impossible"))
         unresolved += cc.get("separate_estimate", 0)
+        unresolved += pending_parts  # 原項目の未確定部分（ケースにせず保留したもの）
         archs.append({
             "arch_id": aid,
             "name": arch["name"],
@@ -209,7 +212,7 @@ def calculate(standards: dict, normalized: dict, design: dict, assessments: dict
             "components": comp_rows,
             "subtotals": {"cases": cs, "common": cm,
                           "computed_total": {k: round(cs[k] + cm[k], 6) for k in POINTS}},
-            "counts": {"cases": cc, "components": mc, "unresolved_items": unresolved},
+            "counts": {"cases": cc, "components": mc, "pending_parts": pending_parts, "unresolved_items": unresolved},
             "estimate_completeness": "全対象算定" if unresolved == 0 else "一部未算定",
         })
     return {
@@ -229,6 +232,18 @@ def calculate(standards: dict, normalized: dict, design: dict, assessments: dict
         "note": "computed_totalは算定済み分の合計。一部未算定の場合は案件全体の確定総額ではない。",
         "architectures": archs,
     }
+
+
+def compare_estimate(stored: dict, recomputed: dict) -> str:
+    """保存済み estimate と再計算結果の照合。
+    match: 一致（版の表記だけ違う場合も一致とみなす）/ rule_version_changed: 計算規則の版が変わり結果も変わった /
+    mismatch: 同じ版なのに結果が違う（手編集・上流変更、または計算を変えたのに版を上げ忘れた）。"""
+    strip = lambda e: {k: v for k, v in e.items() if k != "rule_versions"}  # noqa: E731
+    if sha256_json(strip(stored)) == sha256_json(strip(recomputed)):
+        return "match"
+    if stored.get("rule_versions") != recomputed.get("rule_versions"):
+        return "rule_version_changed"
+    return "mismatch"
 
 
 def calc_common_example(example: dict, std_common: dict) -> dict:

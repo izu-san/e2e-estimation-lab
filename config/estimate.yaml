@@ -23,3 +23,5 @@ execution:
   site_interaction: false     # 対象サイトへの操作は行わない（falseのみ許可）
   max_repair_attempts: 2      # 機械検証エラーに対するAIの修正上限
   chunk_rows: 80              # AI読解用ビューの分割行数
+site:
+  access: unavailable         # 対象サイトを閲覧できる案件は browsable と base_url を設定する（config/estimate_site.yaml）

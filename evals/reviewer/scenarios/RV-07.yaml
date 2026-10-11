@@ -1,0 +1,9 @@
+id: RV-07
+description: C-001 の確認手順を「複雑」とし、原資料にない根拠を書いた（採点根拠の捏造）
+changes:
+  - {file: ai/assessments.json, op: set, path: "case_assessments[0].axes.AX-02.score", value: 3}
+  - {file: ai/assessments.json, op: set, path: "case_assessments[0].axes.AX-02.condition", value: 複雑}
+  - {file: ai/assessments.json, op: set, path: "case_assessments[0].axes.AX-02.evidence", value: "テスト項目!D5:D6 に複数画面の状態比較と金額の計算結果の突合が書かれている"}
+expect:
+  kinds: [scoring]
+  targets: [C-001]

@@ -1,0 +1,4 @@
+# estimate-reviewer のライブ評価。閾値は PoC 用の仮決め（評価担当者が見直す）。
+# baseline: 意味的に正しい ai/*.json（evals/reviewer/baseline）。scenarios/*.yaml が欠陥を1つずつ仕込む。
+thresholds:
+  min_detected: 6   # 欠陥を正しい kind・target で指摘できたシナリオ数（現在 RV-01〜03,06〜08,INJ の7件中）

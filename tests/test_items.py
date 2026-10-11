@@ -10,7 +10,7 @@ from conftest import ADAPTER
 from estimator.items import expand_normalized
 from estimator.workbook_reader import read_workbook
 from helpers import build_cases_standard, build_common_standard, write_config, write_json
-from test_pipeline import assessments, design, questions, run_cli
+from test_pipeline import assessments, design, questions, run_cli, screens
 
 AX = ["AX-01", "AX-02", "AX-03", "AX-04", "AX-05"]
 
@@ -142,6 +142,11 @@ def test_pipeline_with_groups(tmp_path, capsys):
                                                  "cases": cases})
     code, out = run_cli(capsys, "validate-stage", "--run", "L1", "--stage", "normalize")
     assert code == 0, out
+    scr = screens(("C1", "C2"))
+    for sc in scr["screens"]:
+        sc["refs"] = [{"workbook_id": "W1", "sheet": "機能X", "range": "B5"}]
+    scr["screens"][0]["checked_by"] = ["C3", "C4"]
+    write_json(rd / "ai/screens.json", scr)
     d = design()
     for comp in d["components"]:
         comp["used_by"] = ["C1", "C2", "C3", "C4"]
@@ -150,7 +155,7 @@ def test_pipeline_with_groups(tmp_path, capsys):
     a["case_assessments"] = [dict(a["case_assessments"][0], case_id=f"C{v}") for v in range(1, 5)]
     write_json(rd / "ai/assessments.json", a)
     write_json(rd / "ai/questions.json", questions())
-    for st in ("common_design", "assessments"):
+    for st in ("screens", "common_design", "assessments"):
         code, out = run_cli(capsys, "validate-stage", "--run", "L1", "--stage", st)
         assert code == 0, out
     assert run_cli(capsys, "calculate", "--run", "L1")[0] == 0
@@ -183,6 +188,7 @@ def _run_basic(tmp_path, capsys):
     run_cli(capsys, "extract", "--run", "S1")
     rd = Path(out["run_dir"])
     write_json(rd / "ai/normalized_cases.json", normalized())
+    write_json(rd / "ai/screens.json", screens())
     write_json(rd / "ai/common_design.json", design())
     write_json(rd / "ai/questions.json", questions())
     return rd
@@ -235,7 +241,7 @@ def test_conditions_listed_in_summary(tmp_path, capsys):
                                     conditions=["一覧の表示件数を仮定"])
     a["common_assessments"][0].update(estimate_status="条件付き", conditions=["CIなしを仮定"])
     write_json(rd / "ai/assessments.json", a)
-    for st in ("normalize", "common_design", "assessments"):
+    for st in ("normalize", "screens", "common_design", "assessments"):
         assert run_cli(capsys, "validate-stage", "--run", "S1", "--stage", st)[0] == 0
     run_cli(capsys, "calculate", "--run", "S1")
     run_cli(capsys, "validate", "--run", "S1")

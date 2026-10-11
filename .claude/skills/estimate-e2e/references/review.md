@@ -29,6 +29,21 @@
 `target`・`related` は成果物に実在するID（または全体を指す `overall`）。`mark-review --by ai` は検証エラーがあると記録を拒否する。
 検証は形式とIDの実在だけで、指摘の当否は判断しない。
 
-レビュー後 `scripts/estimator mark-review --run <id> --by ai --context independent|self`。
+## 指摘への対応（resolution）
+指摘は記録して終わりにしない。`mark-review --by ai` は、全指摘に `resolution` が無いと記録を拒否する。
+本セッションが各指摘を読み、`ai/semantic_review.json` の該当指摘に追記する（指摘本文は書き換えない）:
+```json
+"resolution": {"status": "fixed", "note": "C-015 の AX-01 を1点に修正（注文確定の操作列は FLOW-002 が所有）"}
+```
+| status | 使うとき |
+|---|---|
+| fixed | 成果物を直した。通常の工程（validate-stage → calculate → validate → export）をやり直してから記録する |
+| question | 確認事項として起票した。`question_ids` 必須（questions.json に実在するID） |
+| rejected | 指摘に当たらない。`note` に基準・原資料の根拠を書く |
+| deferred | 今回は直さない（基準担当の回答待ち等）。`note` に理由。状態は「AIレビュー済（未対応N件）」になる |
+
+順序: レビュー → 指摘に対応（修正なら再計算まで）→ resolution を記録 → `validate-stage --stage semantic_review` →
+`scripts/estimator mark-review --run <id> --by ai --context independent|self`。
+mark-review 後に見積もりが変わると、状態に「レビュー記録後に見積もり変更」と出る。対応をやり直したら mark-review も再実行する。
+`summary.md` と `estimate.xlsx`（意味レビュー シート）に指摘と対応の一覧が出る。未対応の指摘は最終報告にも書く。
 人が確認した場合のみ `--by human --reviewer <名前>`（AIは実行しない）。
-修正が必要なら、修正は通常の工程（validate-stage → calculate → validate → export）でやり直す。

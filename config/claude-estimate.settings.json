@@ -54,6 +54,15 @@
             "command": "{ROOT}/.venv/bin/python -B {ROOT}/scripts/hooks/pre_tool_guard.py"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{ROOT}/.venv/bin/python -B {ROOT}/scripts/hooks/bash_guide.py"
+          }
+        ]
       }
     ],
     "PostToolUse": [

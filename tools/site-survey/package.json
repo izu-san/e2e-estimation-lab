@@ -1,0 +1,8 @@
+{
+  "name": "e2e-estimation-lab-site-survey",
+  "private": true,
+  "description": "対象サイトの読み取りだけの調査（scripts/estimator survey が呼ぶ playwright-cli）",
+  "devDependencies": {
+    "@playwright/cli": "0.1.22"
+  }
+}

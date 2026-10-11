@@ -23,3 +23,9 @@ execution:
   site_interaction: false     # 対象サイトへの操作は行わない（falseのみ許可）
   max_repair_attempts: 2      # 機械検証エラーに対するAIの修正上限
   chunk_rows: 80              # AI読解用ビューの分割行数
+site:
+  access: unavailable         # unavailable: 項目書だけから画面を推定 / browsable: scripts/estimator survey で読み取りだけの調査をする
+  # base_url: https://example.com/
+  # survey:
+  #   max_pages: 40
+  #   exclude_url_patterns: [logout, delete, remove, signout]   # GETでも状態を変えうるURLは開かない

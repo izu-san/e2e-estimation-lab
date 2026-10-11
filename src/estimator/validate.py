@@ -9,10 +9,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from openpyxl.utils import range_boundaries
+from openpyxl.utils import get_column_letter, range_boundaries
 
-from .calculate import calculate
-from .io_utils import read_json, sha256_json
+from .calculate import calculate, compare_estimate
+from .io_utils import read_json
 from .items import expand_normalized, load_normalized
 from .schemas import schema_errors
 
@@ -102,6 +102,9 @@ def validate_normalize(rd: Path) -> list[dict]:
                 errs.append(E("UNKNOWN_REGION", p, f"領域 {rid} は存在しません"))
         for k, ref in enumerate(it["refs"]):
             errs += _check_ref(ref, sheets, f"{p}/refs/{k}")
+        for k, part in enumerate(it.get("pending_parts", [])):
+            for j, ref in enumerate(part.get("refs", [])):
+                errs += _check_ref(ref, sheets, f"{p}/pending_parts/{k}/refs/{j}")
         for k, inh in enumerate(it.get("inheritance", [])):
             errs += _check_ref(inh["ref"], sheets, f"{p}/inheritance/{k}/ref")
             errs += _check_ref(inh["from_ref"], sheets, f"{p}/inheritance/{k}/from_ref")
@@ -157,10 +160,20 @@ def validate_normalize(rd: Path) -> list[dict]:
                 errs.append(E("STEP_COUNT_MISMATCH", f"source_items({sid})",
                               f"分解先 {cids} の step_count 合計 {total} が親項目の step_count {it['step_count']} と一致しません。"
                               "数え方（→区切り等）を親子で揃えるか、差の理由を relation_reason に書いてください", "warning"))
+    # 統合した重複項目は source_item_ids に入れられないため、統合先ケースの文章に ID が残っているか確認する
+    for it in items:
+        if it["disposition"] != "merged_duplicate" or it["duplicate_of"] not in item_by_id:
+            continue
+        target_cases = [c for c in cases if it["duplicate_of"] in c["source_item_ids"]]
+        if target_cases and not any(it["item_id"] in " ".join([c.get("relation_reason", ""), c.get("notes", ""), c.get("summary", "")])
+                                    for c in target_cases):
+            errs.append(E("DUPLICATE_NOT_TRACED", f"source_items({it['item_id']})",
+                          f"統合先ケース {[c['case_id'] for c in target_cases]} の notes / relation_reason に {it['item_id']} の統合が書かれていません。"
+                          "統合元から統合先ケースを辿れるようにしてください", "warning"))
     # parsedの領域にテスト項目が1件も無い場合は警告
     regions_with_items = {rid for it in items for rid in it["region_ids"]}
     for r in data["regions"]:
-        if r["disposition"] == "parsed" and r["region_id"] not in regions_with_items:
+        if r["disposition"] == "parsed" and r["role"] != "data_definition" and r["region_id"] not in regions_with_items:
             errs.append(E("EMPTY_PARSED_REGION", f"regions({r['region_id']})",
                           "parsed ですがsource_itemがありません", "warning"))
     return errs
@@ -207,6 +220,102 @@ def _cycles(graph: dict[str, list[str]]) -> list[list[str]]:
     return found
 
 
+def validate_screens(rd: Path) -> list[dict]:
+    """画面一覧（ai/screens.json）。PAGEの構成要素とAX-01の操作画面の語彙を、共通設計より前に1つに確定させる。"""
+    data, errs = _load(rd, "ai/screens.json")
+    if data is None:
+        return errs
+    errs = schema_errors("screens", data)
+    if errs:
+        return errs
+    norm, e1 = _load(rd, "ai/normalized_cases.json")
+    if e1:
+        return e1
+    sheets = _sheet_index(read_json(rd / "raw_workbook.json"))
+    case_ids = {c["case_id"] for c in norm["cases"]}
+    ids = [s["screen_id"] for s in data["screens"]]
+    for d in _dupes(ids):
+        errs.append(E("DUPLICATE_ID", "screens", f"screen_id {d} が重複しています"))
+    from .survey import surveyed_pages, template_of
+
+    pages = surveyed_pages(rd)
+    surveyed = None if pages is None else set().union(*pages)
+    site = read_json(rd / "manifest.json")["config_resolved"].get("site") or {}
+    if site.get("access") == "browsable" and pages is None:
+        errs.append(E("SURVEY_MISSING", "survey/pages.json", "案件設定で対象サイトを閲覧できる（site.access: browsable）のに調査結果がありません。"
+                                                             "scripts/estimator survey --run <id> を実行してから画面一覧を作ってください"))
+    seen_cases: set[str] = set()
+    for n, sc in enumerate(data["screens"]):
+        p = f"screens/{n}({sc['screen_id']})"
+        for k, ref in enumerate(sc["refs"]):
+            errs += _check_ref(ref, sheets, f"{p}/refs/{k}")
+        if sc["basis"] == "inferred" and not sc["refs"]:
+            errs.append(E("NO_REF", p, "項目書から推定した画面には、画面が現れる原資料の位置 refs が必要です"))
+        if sc["basis"] == "observed" and surveyed is None:
+            errs.append(E("OBSERVED_WITHOUT_SURVEY", p, "basis=observed ですが、対象サイトの調査結果（survey/pages.json）がありません。"
+                                                        "項目書から推定した画面は inferred にしてください"))
+        elif sc["basis"] == "observed" and (not sc["url"] or template_of(sc["url"]) not in surveyed):
+            errs.append(E("SCREEN_URL_NOT_SURVEYED", p, f"basis=observed ですが、url {sc['url']} は調査で開いたページにありません"
+                                                        "（survey/pages.json の template と照合）。調査で確認できない画面は inferred にしてください"))
+        for fld in ("operated_by", "checked_by"):
+            for c in sc[fld]:
+                if c not in case_ids:
+                    errs.append(E("UNKNOWN_CASE", f"{p}/{fld}", f"ケース {c} が存在しません"))
+                seen_cases.add(c)
+        both = sorted(set(sc["operated_by"]) & set(sc["checked_by"]))
+        if both:
+            errs.append(E("SCREEN_ROLE_OVERLAP", p, f"{', '.join(both)} が operated_by と checked_by の両方にあります。"
+                                                    "その画面で入力・クリックするなら operated_by だけにしてください"))
+    for n, nc in enumerate(data["not_counted"]):
+        if nc["merged_into"] is not None and nc["merged_into"] not in ids:
+            errs.append(E("UNKNOWN_SCREEN", f"not_counted/{n}", f"merged_into {nc['merged_into']} が screens にありません"))
+        for k, ref in enumerate(nc.get("refs", [])):
+            errs += _check_ref(ref, sheets, f"not_counted/{n}/refs/{k}")
+    if pages:
+        listed = {template_of(x["url"]) for x in data["screens"] + data["not_counted"] if x.get("url")}
+        for t in sorted(min(pg) for pg in pages if not pg & listed):
+            errs.append(E("SURVEY_PAGE_UNREVIEWED", "screens", f"調査で開いたページ {t} が screens にも not_counted にもありません。"
+                                                               "画面として数えるか、数えない理由を url つきで not_counted に書いてください", "warning"))
+    for c in sorted(case_ids - seen_cases):
+        errs.append(E("CASE_NO_SCREEN", "screens", f"ケース {c} がどの画面の operated_by・checked_by にもありません。"
+                                                   "ケースが操作・確認する画面を一覧に入れてください", "warning"))
+    return errs
+
+
+def _screen_ids(rd: Path) -> tuple[dict | None, list[dict]]:
+    data, errs = _load(rd, "ai/screens.json")
+    if errs:
+        return None, [E("SCREENS_MISSING", "ai/screens.json", "画面一覧（ai/screens.json）がありません。"
+                                                              "共通設計の前に画面一覧を作り validate-stage --stage screens を通してください")]
+    if schema_errors("screens", data):
+        return None, [E("SCREENS_INVALID", "ai/screens.json", "画面一覧がスキーマに合いません（validate-stage --stage screens）")]
+    return data, []
+
+
+def _page_inventory(design: dict, screens: dict) -> list[dict]:
+    """PAGEの構成要素を画面一覧と一致させる（共通基準 BOUND-15。数量の合計＝画面数）。"""
+    inventory = {s["screen_id"] for s in screens["screens"]}
+    errs: list[dict] = []
+    for arch in design["architectures"]:
+        pages = [c for c in design["components"] if c["type_id"] == "PAGE" and arch["arch_id"] in c["arch_ids"]
+                 and c["implementation_kind"] != "対象外"]
+        if not pages:
+            continue
+        got: set[str] = set()
+        for c in pages:
+            unknown = sorted(set(c["elements"]) - inventory)
+            if unknown:
+                errs.append(E("PAGE_NOT_IN_SCREENS", f"components({c['component_id']})",
+                              f"画面一覧に無い構成要素です: {', '.join(unknown)}。PAGEの elements は ai/screens.json の screen_id から選んでください"))
+            got |= set(c["elements"])
+        missing = sorted(inventory - got)
+        if missing:
+            errs.append(E("SCREEN_NOT_IN_PAGE", f"architectures({arch['arch_id']})",
+                          f"構成案 {arch['arch_id']} のPAGEに画面一覧の {', '.join(missing)} がありません"
+                          "（共通基準 BOUND-15: PAGEの数量の合計は画面数と一致させる）。画面一覧を直すか、PAGEに含めてください"))
+    return errs
+
+
 def validate_common_design(rd: Path) -> list[dict]:
     data, errs = _load(rd, "ai/common_design.json")
     if data is None:
@@ -238,6 +347,13 @@ def validate_common_design(rd: Path) -> list[dict]:
         for u in c["used_by"]:
             if u not in case_ids:
                 errs.append(E("UNKNOWN_CASE", p, f"used_by のケース {u} が存在しません"))
+        used = set(c["used_by"])
+        mentioned = sorted({m for m in re.findall(r"[A-Za-z]+-\d+", f"{c['responsibility']} {c['need_reason']}")
+                            if m in case_ids and m not in used})
+        if mentioned:
+            errs.append(E("TEXT_CASE_NOT_IN_USED_BY", p,
+                          f"responsibility/need_reason が挙げたケース {', '.join(mentioned)} が used_by にありません。"
+                          "利用者に含めるか、含めない理由を need_reason に書き、挙げ方を揃えてください", "warning"))
         for fld in ("depends_on",):
             for dep in c[fld]:
                 if dep not in by_id:
@@ -279,6 +395,38 @@ def validate_common_design(rd: Path) -> list[dict]:
                         element_owner[k] = c["component_id"]
     for cyc in _cycles({c["component_id"]: c["depends_on"] for c in comps}):
         errs.append(E("DEPENDENCY_CYCLE", "components", f"依存関係が循環しています: {' → '.join(cyc)}"))
+    errs += _component_rules(data, std)
+    screens, e_scr = _screen_ids(rd)
+    errs += e_scr if screens is None else _page_inventory(data, screens)
+    return errs
+
+
+def _component_rules(design: dict, std: dict) -> list[dict]:
+    """共通作業の立て方（共通基準 BOUND-16〜18）。必須の種別と、FLOW・COMP の最小利用数（警告）。
+    種別と数はアダプター（common.component_rules）から取る。"""
+    rule = std["common"].get("component_rules") or {}
+    if not rule:
+        return []
+    errs: list[dict] = []
+    comps = [c for c in design["components"] if c["implementation_kind"] != "対象外"]
+    for arch in design["architectures"]:
+        types = {c["type_id"] for c in comps if arch["arch_id"] in c["arch_ids"]}
+        for t in rule.get("required_types") or []:
+            if t not in types:
+                errs.append(E("REQUIRED_COMPONENT_MISSING", f"architectures({arch['arch_id']})",
+                              f"構成案 {arch['arch_id']} に {t} がありません（共通基準 構成と重複防止 BOUND-18 等）。"
+                              "要件が不明なら仮定を置いて立て、仮定を質問に残してください", "warning"))
+    dependents: dict[str, int] = {}
+    for c in comps:
+        for dep in c["depends_on"]:
+            dependents[dep] = dependents.get(dep, 0) + 1
+    for c in comps:
+        need = (rule.get("min_users") or {}).get(c["type_id"])
+        users = len(c["used_by"]) + dependents.get(c["component_id"], 0)
+        if need and c["cost_owner"] == c["component_id"] and users < need:
+            errs.append(E("COMPONENT_SINGLE_USE", f"components({c['component_id']})",
+                          f"{c['type_id']} の利用が {users} 件です（used_by と依存部品の合計。{need} 件以上で立てる: 共通基準 BOUND-16・17）。"
+                          "1ケースだけの操作列・1画面だけのUIはケースやPAGEに含めてください", "warning"))
     return errs
 
 
@@ -340,12 +488,16 @@ def validate_assessments(rd: Path) -> list[dict]:
         if a["estimate_status"] == "条件付き" and not a.get("conditions"):
             errs.append(E("NO_CONDITION", p, "条件付きには conditions が必要です"))
         errs += _status_rule(a, axis_ids, status_rule, p)
+        errs += _ambiguity_assumption(a, status_rule, p)
         for u in a.get("uses_components", []):
             if u not in comps:
                 errs.append(E("UNKNOWN_COMPONENT", p, f"uses_components {u} が存在しません"))
         for q in a.get("question_ids", []):
             if q not in q_ids:
                 errs.append(E("UNKNOWN_QUESTION", p, f"question_id {q} が questions.json にありません"))
+    errs += _pending_split_cases(data, norm)
+    errs += _component_overlap(data, design, std)
+    errs += _screen_rule(data, std, _screen_ids(rd)[0])
     errs += _usage_consistency(data, design)
     errs += _question_links(data, design, norm, rd)
     errs += _bare_evidence_refs(data)
@@ -383,11 +535,196 @@ def validate_assessments(rd: Path) -> list[dict]:
         for q in ca.get("question_ids", []):
             if q not in q_ids:
                 errs.append(E("UNKNOWN_QUESTION", p, f"question_id {q} が questions.json にありません"))
+    errs += _page_rule(data, comps, std)
     for cid, c in comps.items():
         if c["implementation_kind"] in ("新規", "改修") and c["cost_owner"] == cid and cid not in seen_c:
             errs.append(E("UNASSESSED", "common_assessments", f"{cid} の難易度判定がありません（未算定になります）",
                           "warning"))
     return errs
+
+
+def page_expected_difficulty(profile: dict, rule: dict) -> str:
+    """画面の特徴から期待難易度を求める（共通基準 BOUND-19 の仮ルール）。"""
+    if profile["complex_ui"]:
+        return "High"
+    if profile["dynamic_list"] or profile["dialog"] or profile["file"] or profile["inputs"] >= rule["mid_inputs_min"]:
+        return "Mid"
+    return "Low"
+
+
+def _page_rule(data: dict, comps: dict, std: dict) -> list[dict]:
+    """PAGEの難易度を画面の特徴（screen_profiles）と照合する（警告）。難易度の違う画面を1部品にまとめていないかも見る。"""
+    rule = std["common"].get("page_rule") or {}
+    if not rule:
+        return []
+    errs: list[dict] = []
+    for n, ca in enumerate(data["common_assessments"]):
+        c = comps.get(ca["component_id"])
+        if not c or c["type_id"] != rule["type_id"] or ca["difficulty"] not in ("Low", "Mid", "High"):
+            continue
+        p = f"common_assessments/{n}({ca['component_id']})"
+        profiles = ca.get("screen_profiles")
+        if not profiles:
+            errs.append(E("PAGE_NO_PROFILE", p, "screen_profiles（画面ごとの入力数・一覧・ダイアログ・ファイル・複雑UI）がありません"
+                                                "（共通基準 BOUND-19）", "warning"))
+            continue
+        got = [pr["element"] for pr in profiles]
+        if sorted(got) != sorted(c["elements"]):
+            errs.append(E("PAGE_PROFILE_MISMATCH", p, f"screen_profiles の画面 {sorted(got)} が elements {sorted(c['elements'])} と一致しません",
+                          "warning"))
+        expected = {pr["element"]: page_expected_difficulty(pr, rule) for pr in profiles}
+        levels = set(expected.values())
+        if len(levels) > 1:
+            errs.append(E("PAGE_MIXED_DIFFICULTY", p,
+                          "難易度の違う画面を1つのPAGE部品にまとめています（"
+                          + "、".join(f"{k}={v}" for k, v in sorted(expected.items()))
+                          + "）。難易度ごとに部品を分けてください（共通基準 BOUND-13・BOUND-19）", "warning"))
+        elif ca["difficulty"] not in levels:
+            errs.append(E("PAGE_DIFFICULTY_RULE", p, f"difficulty={ca['difficulty']} ですが、画面の特徴からは {levels.pop()} です"
+                                                     "（共通基準 BOUND-19）", "warning"))
+    return errs
+
+
+def _pending_split_cases(data: dict, norm: dict) -> list[dict]:
+    """原項目を分解し、一部だけが要確認になったケース（未確定部分の置き場になった疑似ケース）を警告する。
+    未確定部分はケースにせず source_items の pending_parts に保留する（ケース数を水増ししない）。"""
+    errs: list[dict] = []
+    status: dict[str, set[str]] = {}
+    for a in data["case_assessments"]:
+        status.setdefault(a["case_id"], set()).add(a["estimate_status"])
+    kids: dict[str, list[str]] = {}
+    for c in norm["cases"]:
+        if c["relation"] == "split" and len(c["source_item_ids"]) == 1:
+            kids.setdefault(c["source_item_ids"][0], []).append(c["case_id"])
+    for sid, cids in kids.items():
+        pending = [c for c in cids if status.get(c) == {"要確認"}]
+        decided = [c for c in cids if status.get(c) and "要確認" not in status[c]]
+        for c in pending if decided else []:
+            errs.append(E("PENDING_SPLIT_CASE", f"cases({c})",
+                          f"{sid} から分解したケースのうち {c} だけが要確認です（{', '.join(decided)} は算定）。"
+                          "仕様未提示の部分を切り出しただけなら、ケースにせず source_items の pending_parts に保留してください",
+                          "warning"))
+    return errs
+
+
+def _component_overlap(data: dict, design: dict, std: dict) -> list[dict]:
+    """共通部品が所有する作業（データ作成・削除、業務フローの操作列など）を、ケースの軸でも加点していないか。
+    対象の軸と部品種別はアダプター（cases.component_overlap）から取る。該当する軸に overlap_note が無ければ警告する。"""
+    rule = std["cases"].get("component_overlap") or {}
+    pairs = rule.get("pairs") or []
+    min_score = rule.get("min_score")
+    if not pairs or min_score is None:
+        return []
+    errs: list[dict] = []
+    types = {c["component_id"]: c["type_id"] for c in design["components"]}
+    for n, a in enumerate(data["case_assessments"]):
+        used_types: dict[str, list[str]] = {}
+        for u in a.get("uses_components", []):
+            if u in types:
+                used_types.setdefault(types[u], []).append(u)
+        for pr in pairs:
+            v = a["axes"].get(pr["axis"])
+            hits = [cid for t in pr["component_types"] for cid in used_types.get(t, [])]
+            if v and hits and v["score"] is not None and v["score"] >= min_score and not (v.get("overlap_note") or "").strip():
+                errs.append(E("AXIS_COMPONENT_OVERLAP", f"case_assessments/{n}({a['case_id']})/axes/{pr['axis']}",
+                              f"{pr['axis']}={v['score']} ですが、このケースは {', '.join(hits)} を使います。"
+                              "部品が所有する作業をこの軸で再び加点していないか確認し、ケース固有に残る作業を overlap_note に書いてください"
+                              "（部品を呼ぶだけなら1点。個別基準 計上ルール COST-11・COST-12）", "warning"))
+    return errs
+
+
+def _screen_rule(data: dict, std: dict, screens: dict | None) -> list[dict]:
+    """操作手順の軸の画面の数え方（個別基準 計上ルール COST-13）。operation_screens と factors から期待点を求めて照合し、
+    画面が画面一覧にあり、一覧でそのケースが操作する画面かも確かめる。軸と画面数はアダプター（cases.screen_rule）から取る。"""
+    rule = std["cases"].get("screen_rule") or {}
+    if not rule:
+        return []
+    errs: list[dict] = []
+    inventory = {s["screen_id"]: s for s in (screens or {}).get("screens", [])}
+    for n, a in enumerate(data["case_assessments"]):
+        v = a["axes"].get(rule["axis"])
+        if not v or v["score"] not in (1, rule["factor_score"]) or v["score"] == 3:
+            continue
+        p = f"case_assessments/{n}({a['case_id']})/axes/{rule['axis']}"
+        screens_used = v.get("operation_screens")
+        if screens_used is None:
+            errs.append(E("AX01_NO_SCREENS", p, "操作した画面 operation_screens がありません（個別基準 計上ルール COST-13）。"
+                                                 "ケースが自分で操作する画面を画面一覧の screen_id で列挙してください", "warning"))
+            continue
+        n_screens = len(set(screens_used))
+        expected = rule["factor_score"] if n_screens >= rule["multi_screen_min"] or v.get("factors") else 1
+        if v["score"] != expected:
+            errs.append(E("AX01_SCREEN_RULE", p,
+                          f"{rule['axis']}={v['score']} ですが、操作した画面 {n_screens} 件・要因 {v.get('factors') or 'なし'} からは "
+                          f"{expected} 点です（個別基準 計上ルール COST-13）。判定だけの遷移先と共通部品に委ねた操作は数えません", "warning"))
+        if screens is None:
+            continue
+        unknown = sorted(set(screens_used) - set(inventory))
+        if unknown:
+            errs.append(E("SCREEN_NOT_IN_INVENTORY", p, f"画面一覧（ai/screens.json）に無い画面です: {', '.join(unknown)}"))
+        not_operated = sorted(s for s in set(screens_used) & set(inventory)
+                              if a["case_id"] not in inventory[s]["operated_by"])
+        if not_operated:
+            errs.append(E("SCREEN_NOT_OPERATED", p, f"画面一覧では {a['case_id']} が操作しない画面です: {', '.join(not_operated)}。"
+                                                    "確認だけの画面は数えません。一覧が誤りなら画面一覧を直してください", "warning"))
+    return errs
+
+
+def _premise_rows(rd: Path, questions: dict, norm: dict | None) -> list[dict]:
+    """説明・参考領域（資料情報・前提・未確定事項など）の各行が、質問の refs か premise_reviews で扱われているか（警告）。
+    前提・未確定事項の行が質問にも仮定にもならずに見落とされるのを防ぐ。"""
+    if not norm:
+        return []
+    from .items import cell_value_text
+
+    try:
+        inv = read_json(rd / "source_inventory.json")
+        raw = read_json(rd / "raw_workbook.json")
+    except (OSError, ValueError):
+        return []
+    sheets = _sheet_index(raw)
+    covered: dict[tuple[str, str], set[int]] = {}
+
+    def cover(ref: dict) -> None:
+        try:
+            _, r0, _, r1 = range_boundaries(ref["range"])
+        except ValueError:
+            return
+        covered.setdefault((ref["workbook_id"], ref["sheet"]), set()).update(range(r0, r1 + 1))
+
+    for q in questions["items"]:
+        for ref in q.get("refs", []):
+            cover(ref)
+    for pr in questions.get("premise_reviews", []):
+        cover(pr["ref"])
+    inv_by_id = {r["region_id"]: r for r in inv["regions"]}
+    errs: list[dict] = []
+    for r in norm.get("regions", []):
+        reg = inv_by_id.get(r["region_id"])
+        if r["role"] not in PREMISE_ROLES or reg is None:
+            continue
+        sh = sheets.get((reg["workbook_id"], reg["sheet"]))
+        if sh is None:
+            continue
+        min_col, min_row, max_col, max_row = range_boundaries(reg["range"])
+        cols = [get_column_letter(c) for c in range(min_col, max_col + 1)]
+        missing = []
+        for row in range(min_row, max_row + 1):
+            if row in set(r.get("header_rows", [])) or row in covered.get((reg["workbook_id"], reg["sheet"]), set()):
+                continue
+            text = " ".join(t for c in cols if (t := cell_value_text(sh, row, c).strip()))
+            if text:
+                missing.append(f"{row}行「{text[:30]}」")
+        if missing:
+            errs.append(E("PREMISE_ROW_UNTRACED", f"regions({r['region_id']})",
+                          f"{reg['sheet']} の {len(missing)} 行が質問の refs にも premise_reviews にもありません: "
+                          f"{'、'.join(missing[:8])}。前提・未確定事項なら質問/仮定として起票して refs に行を入れ、"
+                          "影響がない・反映済みなら premise_reviews に理由を書いてください（見出し行は regions の header_rows へ）", "warning"))
+    return errs
+
+
+# 前提・未確定事項が書かれやすい領域の役割（normalized_cases の regions[].role）
+PREMISE_ROLES = ("description", "reference")
 
 
 def _usage_consistency(data: dict, design: dict) -> list[dict]:
@@ -545,6 +882,17 @@ def _bare_evidence_refs(data: dict) -> list[dict]:
     return errs
 
 
+def _ambiguity_assumption(a: dict, rule: dict, p: str) -> list[dict]:
+    """あいまい度の軸が最低点（仮定なし）なのに、その軸に仮定が付いている不整合を警告する。"""
+    ax_id = (rule or {}).get("ambiguity_axis")
+    v = a["axes"].get(ax_id) if ax_id else None
+    if v and v.get("score") is not None and v["score"] < rule["conditional_min_score"] and v.get("assumptions"):
+        return [E("AXIS_ASSUMPTION_SCORE", f"{p}/axes/{ax_id}",
+                  f"{ax_id} は仮定なしの点数なのに assumptions があります。案件範囲の仮定（重複統合など）は conditions と質問に書き、"
+                  "この軸の仮定はあいまいさを理由に点数を上げるときだけ使ってください", "warning")]
+    return []
+
+
 def _status_rule(a: dict, axis_ids: list[str], rule: dict, p: str) -> list[dict]:
     """個別基準の見積もり状態の規則（v0.1 RULE-03・RULE-07）。軸IDと閾値はアダプター設定から取る。"""
     if a["scope"] != "対象内":
@@ -575,6 +923,15 @@ def validate_questions(rd: Path) -> list[dict]:
         return errs
     for d in _dupes([q["question_id"] for q in data["items"]]):
         errs.append(E("DUPLICATE_ID", "items", f"question_id {d} が重複しています"))
+    q_ids = {q["question_id"] for q in data["items"]}
+    norm, _ = _load(rd, "ai/normalized_cases.json")
+    for it in (norm or {}).get("source_items", []):
+        for k, part in enumerate(it.get("pending_parts", [])):
+            for q in part.get("question_ids", []):
+                if q not in q_ids:
+                    errs.append(E("UNKNOWN_QUESTION", f"source_items({it['item_id']})/pending_parts/{k}",
+                                  f"question_id {q} が questions.json にありません"))
+    errs += _premise_rows(rd, data, norm)
     return errs
 
 
@@ -616,6 +973,7 @@ def review_target_ids(rd: Path) -> set[str]:
         ("ai/normalized_cases.json", None, (("regions", "region_id"), ("source_items", "item_id"), ("cases", "case_id"))),
         ("ai/common_design.json", None, (("architectures", "arch_id"), ("components", "component_id"))),
         ("ai/questions.json", None, (("items", "question_id"),)),
+        ("ai/screens.json", None, (("screens", "screen_id"),)),
     ):
         p = rd / rel
         if not p.exists():
@@ -638,17 +996,48 @@ def validate_semantic_review(rd: Path) -> list[dict]:
     if errs:
         return errs
     known = review_target_ids(rd)
+    q_ids = _question_ids(rd)
     for n, f in enumerate(data["findings"]):
         for field, ids in (("target", [f["target"]]), ("related", f.get("related", []))):
             for i in ids:
                 if i not in known:
                     errs.append(E("UNKNOWN_TARGET", f"findings/{n}/{field}",
                                   f"{i} は成果物に存在するID（case_id/component_id/item_id/region_id/question_id/arch_id）でも overall でもありません"))
+        res = f.get("resolution")
+        if res is None:
+            errs.append(E("FINDING_UNRESOLVED", f"findings/{n}({f['target']})",
+                          "指摘への対応 resolution がありません（fixed/question/rejected/deferred と note）。"
+                          "mark-review --by ai の前に全指摘へ対応を記録してください", "warning"))
+            continue
+        if res["status"] == "question":
+            if not res.get("question_ids"):
+                errs.append(E("NO_QUESTION", f"findings/{n}/resolution", "status=question には起票した question_ids が必要です"))
+            for q in res.get("question_ids", []):
+                if q not in q_ids:
+                    errs.append(E("UNKNOWN_QUESTION", f"findings/{n}/resolution",
+                                  f"question_id {q} が questions.json にありません"))
     return errs
+
+
+def review_resolution_counts(rd: Path) -> dict[str, int] | None:
+    """意味レビュー指摘の対応状況の件数。対応未記録は unresolved。指摘ファイルが無ければNone。"""
+    p = rd / "ai/semantic_review.json"
+    if not p.exists():
+        return None
+    try:
+        findings = read_json(p).get("findings", [])
+    except ValueError:
+        return None
+    out = {"total": len(findings), "fixed": 0, "question": 0, "rejected": 0, "deferred": 0, "unresolved": 0}
+    for f in findings:
+        st = (f.get("resolution") or {}).get("status")
+        out[st if st in out else "unresolved"] += 1
+    return out
 
 
 STAGE_VALIDATORS = {
     "normalize": validate_normalize,
+    "screens": validate_screens,
     "common_design": validate_common_design,
     "assessments": validate_assessments,
     "questions": validate_questions,
@@ -707,7 +1096,12 @@ def validate_all(rd: Path, config: dict) -> dict:
             recomputed = calculate(std, load_normalized(rd),
                                    read_json(rd / "ai/common_design.json"), read_json(rd / "ai/assessments.json"),
                                    config)
-            if sha256_json(recomputed) != sha256_json(est):
+            verdict = compare_estimate(est, recomputed)
+            if verdict == "rule_version_changed":
+                calc_errs.append(E("RULE_VERSION_CHANGED", "estimate.json",
+                                   f"計算規則の版が変わっています（estimate: {est.get('rule_versions')}、現行: "
+                                   f"{recomputed['rule_versions']}）。calculate を再実行してください"))
+            elif verdict == "mismatch":
                 calc_errs.append(E("RECOMPUTE_MISMATCH", "estimate.json",
                                    "estimate.json が現在の採点・基準からの再計算結果と一致しません（手編集または上流変更）"))
         except (KeyError, TypeError, ValueError) as ex:

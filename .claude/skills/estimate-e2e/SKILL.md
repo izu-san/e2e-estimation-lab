@@ -21,15 +21,24 @@ argument-hint: "<inputs/項目書.xlsx> --config <config/estimate.yaml>  |  --pr
 - 結合セル・空欄の値を一律に前方補完しない。意味上継承したら `inheritance` に根拠を残す。
 - 領域・項目・重複候補を無言で捨てない。読めない図・欠落仕様は `questions.json` に残す。
 - 検証器・スキーマ・基準・設定・入力を変更してエラーを消さない。見積もり中にSkill/ハーネスを修正しない。
-- 対象サイトへのアクセス・登録・注文はしない。不明点はユーザーに質問せず、成果物に残して進める。
+- 対象サイトへ自分でアクセス（WebFetch・ブラウザー操作）・登録・注文をしない。閲覧できる案件の調査は
+  `scripts/estimator survey` だけが行う（読み取りのみ）。不明点はユーザーに質問せず、成果物に残して進める。
 - 1クリック・1assert・1URLを自動的に1ケースにしない。
 
+## 実行環境（見積もりモード）
+`scripts/start-estimate-session.sh` から起動した見積もりモードでは、権限が次のように絞られている。
+- Bash は `scripts/estimator <サブコマンド> ...` の**単独実行だけ**使える。`&&`・`;`・パイプ・変数代入・`ls`・`cat` は拒否される。
+- ファイルの一覧は Glob、内容は Read、検索は Grep を使う。書けるのは現在の `runs/<run_id>/` だけ。
+- Bash が1回拒否されても「Bash全体が使えない」と判断しない。まず `scripts/estimator status --run <id>` を単独で実行して確かめる。
+
 ## 工程
-CLIは `scripts/estimator <command>`。各コマンドはJSONを出力する。
+CLIは `scripts/estimator <command>`。各コマンドはJSONを出力する。1回の呼出しで1コマンドだけ実行する。
 
 1. **実行開始**: 引数が `--run <id>` なら既存runを使う。そうでなければ
    `scripts/estimator init-run --input <xlsx> --config <yaml>`（または `--project <manifest>`）→ `scripts/estimator extract --run <id>`。
    `standards_errors` / `missing_inputs` / `constraints` があれば記録し、算定できる範囲で続ける。
+   案件設定の `site.access` が `browsable` なら、続けて `scripts/estimator survey --run <id>` で対象サイトを調査する
+   （`runs/<id>/survey/pages.json`。画面一覧の根拠に使う）。`unavailable` なら調査しない。
 2. **読解**: `runs/<id>/source_inventory.json`（領域一覧）と `runs/<id>/views/*.md`（座標つき原文）を読む。
    大規模な表は全行を読む前に `scripts/estimator profile --run <id> --sheet <名> --rows <範囲> --header-row <行>`
    で列ごとの値の分布（観点・データ・ブラウザーの繰返し）を把握し、代表行と境界を `render` で確認する。
@@ -37,17 +46,25 @@ CLIは `scripts/estimator <command>`。各コマンドはJSONを出力する。
    例の確認や省略シートが必要なときだけ全文の `cases.md` / `common.md` を見る。値の照合は `runs/<id>/standards.json`。
 3. **項目整理** → `runs/<id>/ai/normalized_cases.json` を書く → `scripts/estimator validate-stage --run <id> --stage normalize`
    詳細: [references/normalize.md](references/normalize.md)
-4. **共通部分の設計** → `ai/common_design.json` → `validate-stage --stage common_design`
+4. **画面一覧** → `ai/screens.json` → `validate-stage --stage screens`
+   案件で扱う画面を先に一度だけ確定させる。PAGE の `elements` と AX-01 の `operation_screens` はこの一覧から選ぶ。
+   詳細: [references/screens.md](references/screens.md)
+5. **共通部分の設計** → `ai/common_design.json` → `validate-stage --stage common_design`
    詳細: [references/common-design.md](references/common-design.md)
-5. **確認事項・仮定・不可理由の起票** → `ai/questions.json`（0件でも `items: []`）→ `validate-stage --stage questions`
-   採点（工程6）が `question_ids` で参照するため先に作る。質問ID（`Q-001` 等）をここで採番する。
+6. **確認事項・仮定・不可理由の起票** → `ai/questions.json`（0件でも `items: []`）→ `validate-stage --stage questions`
+   採点（工程7）が `question_ids` で参照するため先に作る。質問ID（`Q-001` 等）をここで採番する。
    採点中に新しい質問・仮定が出たら `questions.json` に追記して `validate-stage --stage questions` をやり直す。
-6. **個別ケースの5軸採点と共通作業の難易度** → `ai/assessments.json` → `validate-stage --stage assessments`
+   資料情報・前提・未確定事項など説明・参考領域（role が description / reference）の**各行**を、質問の `refs` に入れるか、
+   質問にしない理由を `premise_reviews` に書く（漏れは `PREMISE_ROW_UNTRACED` 警告）。実行環境の未調査事項、受入基準、
+   公開サイトへの書込みの可否は質問・仮定に残りやすい漏れ。
+7. **個別ケースの5軸採点と共通作業の難易度** → `ai/assessments.json` → `validate-stage --stage assessments`
    詳細: [references/assessment.md](references/assessment.md)
-7. **計算・検証・出力**: `scripts/estimator calculate --run <id>` → `validate --run <id>` → `export --run <id>`
-8. **意味レビュー（別パス）**: 結果を見直し、指摘を `ai/semantic_review.json` に書く（計算結果は書き換えない）→
-   `scripts/estimator mark-review --run <id> --by ai --context independent|self`。
+8. **計算・検証・出力**: `scripts/estimator calculate --run <id>` → `validate --run <id>` → `export --run <id>`
+9. **意味レビュー（別パス）**: 結果を見直し、指摘を `ai/semantic_review.json` に書く（計算結果は書き換えない）→
+   各指摘に対応して `resolution`（fixed / question / rejected / deferred と note）を記録（直したら工程8をやり直す）→
+   `scripts/estimator mark-review --run <id> --by ai --context independent|self`。対応が未記録の指摘があると記録を拒否する。
    作成者と別コンテキストのレビュー役（サブエージェント）に任せられれば `independent`、本人が見直した場合は `self`。
+   `mark-review` は既に出力済みの `validation.json`・`summary.md`・`estimate.xlsx` の意味レビュー状態も更新する。
    `self` は「AIレビュー済（自己レビュー）」と表示され、独立レビューとは区別される。詳細: [references/review.md](references/review.md)
 
 各JSONの形式と例: [references/formats.md](references/formats.md)
@@ -61,4 +78,4 @@ CLIは `scripts/estimator <command>`。各コマンドはJSONを出力する。
 - `runs/<id>/` に `estimate.json`、`validation.json`、`estimate.xlsx`、`summary.md` がある。
 - `validate` の結果（`machine_validation`、`execution_status`、`estimate_completeness`）をそのまま報告する。
 - 最終報告では、算定済み総計を「確定総額」と呼ばない（未算定・Impossible・要確認が残る場合）。
-  要確認件数、Impossible件数、主要な確認事項、意味レビューが人確認済みでないことを明記する。
+  要確認件数、Impossible件数、保留した未確定部分、主要な確認事項、意味レビューの未対応の指摘、意味レビューが人確認済みでないことを明記する。

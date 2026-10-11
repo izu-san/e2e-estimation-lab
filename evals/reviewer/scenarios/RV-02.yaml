@@ -1,0 +1,47 @@
+id: RV-02
+description: "参考欄の注記（参考: 対象URLは別紙）をテスト項目・ケースにした（説明行混入）"
+changes:
+  - file: ai/normalized_cases.json
+    op: append
+    path: source_items
+    value:
+      item_id: T-3
+      original_id: null
+      id_assigned: true
+      region_ids: [W1-S1-R003]
+      refs: [{workbook_id: W1, sheet: テスト項目, range: A10}]
+      title: 対象URLの確認
+      step_count: 1
+      expected_count: 1
+      data_pattern_count: 1
+      disposition: mapped
+      duplicate_of: null
+      reason: 参考欄の記載を項目とした
+  - file: ai/normalized_cases.json
+    op: append
+    path: cases
+    value: {case_id: C-003, title: 対象URLの確認, source_item_ids: [T-3], relation: one_to_one, summary: 対象URLを確認する,
+            steps: ["URLを確認する"], expected: ["URLが正しい"], step_count: 1, assertion_count: 1, data_pattern_count: 1}
+  - file: ai/assessments.json
+    op: append
+    path: case_assessments
+    value:
+      case_id: C-003
+      arch_ids: [A1]
+      scope: 対象内
+      scope_reason: ""
+      feasibility: feasible
+      info_sufficient: true
+      estimate_status: 確定可能
+      rationale: 参考欄の記載をケースとした。
+      uses_components: [BASE-1]
+      axes:
+        AX-01: {score: 1, condition: 単純, evidence: "テスト項目!A10 の記載を確認する1操作"}
+        AX-02: {score: 1, condition: 単純, evidence: "テスト項目!A10 の記載との直接比較"}
+        AX-03: {score: 1, condition: 単純, evidence: 標準操作で完結する}
+        AX-04: {score: 1, condition: 単純, evidence: "テスト項目!A10 の記載が具体的"}
+        AX-05: {score: 1, condition: 単純, evidence: データ準備は不要}
+  - {file: ai/common_design.json, op: append, path: "components[0].used_by", value: C-003}
+expect:
+  kinds: [other, status, over_split, scoring]
+  targets: [T-3, C-003, W1-S1-R003]

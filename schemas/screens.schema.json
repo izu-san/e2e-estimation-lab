@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "screens.schema.json",
+  "title": "画面一覧（AI提出）。PAGEの構成要素とAX-01の操作画面はこの一覧から選ぶ",
+  "type": "object",
+  "required": ["schema_version", "screens", "not_counted"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "screens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["screen_id", "name", "url", "basis", "evidence", "refs", "operated_by", "checked_by"],
+        "additionalProperties": false,
+        "properties": {
+          "screen_id": {"description": "PAGEの elements と AX-01 の operation_screens に使うID（例 PG-Login）", "$ref": "defs.schema.json#/$defs/id"},
+          "name": {"type": "string", "minLength": 1},
+          "url": {"type": ["string", "null"], "description": "URLまたはパス（例 /login）。原資料・調査に無ければnull"},
+          "basis": {"enum": ["inferred", "observed"], "description": "inferred: 項目書の文脈から推定 / observed: 対象サイトの調査（survey/）で確認"},
+          "evidence": {"type": "string", "minLength": 1, "description": "別画面と判断した根拠（遷移・ページ名・URLの記述など）"},
+          "refs": {"type": "array", "items": {"$ref": "defs.schema.json#/$defs/ref"}, "description": "画面が現れる原資料の位置"},
+          "operated_by": {"description": "この画面で自分の手順として入力・クリックするケース（共通部品に委ねる前の項目書の手順で判断）", "$ref": "defs.schema.json#/$defs/id_list"},
+          "checked_by": {"description": "この画面の表示を確認するだけのケース", "$ref": "defs.schema.json#/$defs/id_list"},
+          "notes": {"type": "string"}
+        }
+      }
+    },
+    "not_counted": {
+      "type": "array",
+      "description": "画面の候補として検討したが数えなかったもの（同じ画面のモーダル・タブ、通過するだけの画面など）",
+      "items": {
+        "type": "object",
+        "required": ["name", "reason", "merged_into"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1},
+          "merged_into": {"type": ["string", "null"], "description": "同じ画面として扱った screen_id。数えないだけならnull"},
+          "refs": {"type": "array", "items": {"$ref": "defs.schema.json#/$defs/ref"}},
+          "url": {"type": ["string", "null"], "description": "調査したページを数えない場合はそのURL（調査結果の確認漏れの照合に使う）"}
+        }
+      }
+    }
+  }
+}

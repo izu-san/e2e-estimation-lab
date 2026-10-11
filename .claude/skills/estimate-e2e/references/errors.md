@@ -31,6 +31,8 @@
 | USAGE_MISMATCH | `common_design.json` の `used_by` と `assessments.json` の `uses_components` を一致させる。部品を使うケースは両方に書く（RUN・BASEなど全ケースが使う部品も含む）。どちらが正しいかは責務から決める |
 | STEP_COUNT_MISMATCH（警告） | 親項目と分解先ケースの `step_count` の数え方を揃える。意図して違う場合は `relation_reason` に理由を書く |
 | QUESTION_NOT_LINKED / QUESTION_TARGET_MISSING（警告） | 質問の `targets` と、ケース・共通作業の `question_ids` を双方向でそろえる。同じ前提に依存する他のケースの漏れも探す |
+| DUPLICATE_NOT_TRACED（警告） | 統合した重複項目の item_id を、統合先ケースの `notes` / `relation_reason` に書く |
+| AXIS_ASSUMPTION_SCORE（警告） | あいまい度が仮定なしの点数なのに軸に assumptions がある。案件範囲の仮定は conditions と質問へ移すか、あいまいさがあるなら点数を見直す |
 | EVIDENCE_REF_NO_SHEET（警告） | evidence のセル座標は `シート名!セル`（例: `確認リスト!C3`）。`views/*.md` で実際の座標を確認する。列Aが「No.」の場合、手順・期待結果は別の列にある |
 
 ## 基準への接地チェック（2026-10 追加）
@@ -42,3 +44,32 @@
 | POM_ASSUMPTION_NOT_CONDITIONAL（警告） | POM未指定でPOM採用案を作るなら、PAGE作業を条件付きにして仮定・再見積条件を書く（共通基準 COMMON-OUT-01） |
 | QUESTION_NOT_INHERITED（警告） | 依存先の部品が未解決の質問を持つのに、ケースが確定可能。conditionsとquestion_idsに影響を残す |
 | EVIDENCE_COMPONENT_NOT_USED（警告） | 根拠が言及する部品を `uses_components`/`used_by` に入れるか、言及を直接/経由で揃える |
+
+## runs/ 横断調査で見つかった再発への対策（2026-10 追加）
+| code | 対応 |
+|---|---|
+| FINDING_UNRESOLVED（警告。mark-review は拒否） | 意味レビューの各指摘に `resolution` を書く（review.md） |
+| NO_QUESTION | `resolution.status: question` には起票した `question_ids` を書く |
+| RULE_VERSION_CHANGED | 計算規則の版が変わった。AIの成果物はそのままで `calculate` → `validate` → `export` を再実行する |
+| PENDING_SPLIT_CASE（警告） | 分解したケースの一部だけが要確認。仕様未提示の部分を切り出しただけなら、ケースをやめて原項目の `pending_parts` に保留する |
+| AXIS_COMPONENT_OVERLAP（警告） | DATA/FIX を使うケースの AX-05、FLOW を使うケースの AX-01 が2点以上。部品の作業を除いて残るケース固有の作業を軸の `overlap_note` に書くか、点数を見直す |
+| PREMISE_ROW_UNTRACED（警告） | 資料情報・前提の行が質問にも premise_reviews にもない。前提・未確定事項なら質問/仮定にして `refs` に行を入れ、影響がなければ `premise_reviews` に理由を書く |
+| AX01_NO_SCREENS（警告） | AX-01 に `operation_screens`（ケースが自分で操作した画面。画面一覧の screen_id）を書く（個別基準 COST-13） |
+| AX01_SCREEN_RULE（警告） | 操作した画面が2つ以上か、`factors`（branch/dialog/file）があれば2点、それ以外は1点。判定だけの遷移先と共通部品に委ねた操作は数えない |
+| SCREENS_MISSING | 共通設計の前に画面一覧 `ai/screens.json` を作り、`validate-stage --stage screens` を通す |
+| SCREEN_NOT_IN_PAGE | 画面一覧の画面が構成案のPAGEの `elements` に無い。PAGE に含めるか、数えないなら画面一覧の `not_counted` へ移す |
+| PAGE_NOT_IN_SCREENS | PAGE の `elements` に画面一覧外のIDがある。画面一覧の `screen_id` を使う（画面を足すなら画面一覧から） |
+| SCREEN_NOT_IN_INVENTORY | AX-01 の `operation_screens` に画面一覧外のIDがある。画面一覧の `screen_id` から選ぶ |
+| SCREEN_NOT_OPERATED（警告） | 画面一覧でそのケースの `operated_by` に無い画面を操作画面にしている。確認だけの画面は数えない。一覧の誤りなら一覧を直す |
+| CASE_NO_SCREEN（警告） | どの画面の `operated_by`・`checked_by` にも無いケースがある。ケースが操作・確認する画面を一覧に入れる |
+| OBSERVED_WITHOUT_SURVEY | 対象サイトの調査結果（`survey/`）が無いのに `basis: observed`。項目書から推定した画面は `inferred` |
+| SURVEY_MISSING | 案件設定が `site.access: browsable` なのに調査結果が無い。`scripts/estimator survey --run <id>` を実行してから画面一覧を検証し直す |
+| SCREEN_URL_NOT_SURVEYED | `basis: observed` の `url` が調査で開いたページに無い。調査で確認できない画面は `inferred` |
+| SURVEY_PAGE_UNREVIEWED（警告） | 調査で開いたページが `screens` にも `not_counted` にも無い。数えるか、`url` つきで数えない理由を書く |
+| SCREEN_ROLE_OVERLAP | 同じケースが `operated_by` と `checked_by` の両方にある。操作するなら `operated_by` だけ |
+| REQUIRED_COMPONENT_MISSING（警告） | 構成案に BASE・RUN を立てる。要件が不明なら仮定を置き質問に残す（BOUND-18） |
+| COMPONENT_SINGLE_USE（警告） | FLOW・COMP は2件以上が使うものだけ（BOUND-16・17）。1ケースだけならケースや PAGE に含める |
+| PAGE_NO_PROFILE（警告） | PAGE の判定に `screen_profiles`（画面ごとの inputs・dynamic_list・dialog・file・complex_ui）を書く（共通基準 BOUND-19） |
+| PAGE_PROFILE_MISMATCH（警告） | `screen_profiles` の画面を、その PAGE の `elements` と一致させる |
+| PAGE_MIXED_DIFFICULTY（警告） | 期待難易度の違う画面が1つの PAGE 部品にある。難易度ごとに部品を分ける（BOUND-13・19） |
+| PAGE_DIFFICULTY_RULE（警告） | 画面の特徴から決まる難易度に合わせる。特徴の記録が事実と違うなら特徴の方を直す |

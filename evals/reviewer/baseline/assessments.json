@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "case_assessments": [
+    {
+      "case_id": "C-001",
+      "arch_ids": [
+        "A1"
+      ],
+      "scope": "対象内",
+      "scope_reason": "",
+      "feasibility": "feasible",
+      "info_sufficient": true,
+      "axes": {
+        "AX-01": {
+          "score": 2,
+          "condition": "中程度",
+          "evidence": "テスト項目!C5:C6 の2手順（一覧を開く→商品を選ぶ）で画面遷移を伴う"
+        },
+        "AX-02": {
+          "score": 1,
+          "condition": "単純",
+          "evidence": "テスト項目!D5:D6 の一覧・詳細の表示確認"
+        },
+        "AX-03": {
+          "score": 1,
+          "condition": "単純",
+          "evidence": "クリックと表示検証の標準操作で完結し、BASE-1・PAGE-1 を利用する"
+        },
+        "AX-04": {
+          "score": 1,
+          "condition": "単純",
+          "evidence": "テスト項目!C5:D6 の手順と期待結果が具体的"
+        },
+        "AX-05": {
+          "score": 1,
+          "condition": "単純",
+          "evidence": "テスト項目!B5 の前提（ログイン済み）のみで、データ準備は軽微"
+        }
+      },
+      "estimate_status": "確定可能",
+      "rationale": "商品一覧から詳細表示までの一連の操作を1つの判定単位とした。",
+      "uses_components": [
+        "BASE-1",
+        "PAGE-1"
+      ]
+    },
+    {
+      "case_id": "C-002",
+      "arch_ids": [
+        "A1"
+      ],
+      "scope": "対象内",
+      "scope_reason": "",
+      "feasibility": "feasible",
+      "info_sufficient": false,
+      "axes": {
+        "AX-01": {
+          "score": 1,
+          "condition": "単純",
+          "evidence": "テスト項目!C7 のログインボタン押下の1操作"
+        },
+        "AX-02": {
+          "score": 1,
+          "condition": "単純",
+          "evidence": "テスト項目!D7 のログイン画面の表示確認"
+        },
+        "AX-03": {
+          "score": null,
+          "condition": "",
+          "evidence": ""
+        },
+        "AX-04": {
+          "score": 1,
+          "condition": "単純",
+          "evidence": "テスト項目!C7:D7 の操作と期待結果は具体的"
+        },
+        "AX-05": {
+          "score": 1,
+          "condition": "単純",
+          "evidence": "テスト項目!B7 の前提（未ログイン）で準備不要"
+        }
+      },
+      "estimate_status": "要確認",
+      "rationale": "ログイン画面への遷移確認。ログイン手段が資料にないため要確認（Q1）。",
+      "question_ids": [
+        "Q1"
+      ],
+      "uses_components": [
+        "BASE-1"
+      ]
+    }
+  ],
+  "common_assessments": [
+    {
+      "component_id": "BASE-1",
+      "difficulty": "Low",
+      "matched_conditions": "単純",
+      "rationale": "実行基盤は単一環境の標準構成。複数環境の切替は資料にない。",
+      "estimate_status": "確定可能",
+      "standard_refs": [
+        "common:工数表!A2"
+      ]
+    },
+    {
+      "component_id": "PAGE-1",
+      "difficulty": "Mid",
+      "matched_conditions": "中程度",
+      "rationale": "一覧と詳細の2画面を1つのページオブジェクトで扱う。",
+      "estimate_status": "確定可能"
+    }
+  ]
+}

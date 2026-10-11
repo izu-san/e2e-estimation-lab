@@ -2,6 +2,6 @@
 # 回帰テスト専用。本番の計算ロジックには使わない。
 # standards_sha256: 正本の共通基準を配置・確認後に記入し、版を紐付ける（未記入の間は版照合なし）。
 standards_version: "0.1"
-standards_sha256: c80459c70d50337ecc081310e2505a5978af1a14372eef39984148d62ea65d29   # 2026-10-10 配置の正本
+standards_sha256: 28489c9a2a5118f2ff302503c4e9226012de5d210004964ad1cae56782dbfac0   # 2026-10-11 BOUND-15〜18 追記版（判定集計例は変更なし）
 expected_computed_subtotal: {low: 22.0, std: 39.0, high: 64.0}
 review_status: from_implementation_guide

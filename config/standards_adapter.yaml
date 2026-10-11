@@ -47,6 +47,21 @@ cases:
     ambiguity_axis: AX-04
     conditional_min_score: 2
     rule_ref: 総合判定!C8 (RULE-07)
+  # 共通部品との二重計上の確認（検証器の警告 AXIS_COMPONENT_OVERLAP）。基準の数値ではなく検証の対象指定。
+  # ケースが右の種別の部品を使い、左の軸が min_score 以上なら、軸に overlap_note（ケース固有に残る作業）を求める。
+  # 根拠: 個別基準 計上ルール COST-11（DATA/FIXを呼ぶケースのAX-05は1点）・COST-12（AX-01はケース固有の画面・分岐だけ）。
+  # 経緯は docs/standards_questions.md（SQ-01）。
+  component_overlap:
+    min_score: 2
+    pairs:
+      - {axis: AX-05, component_types: [DATA, FIX]}
+      - {axis: AX-01, component_types: [FLOW]}
+  # AX-01 の画面の数え方（個別基準 計上ルール COST-13）の照合（検証器の警告 AX01_SCREEN_RULE）。
+  # 操作した画面（operation_screens）が multi_screen_min 以上、または factors があれば factor_score 点、それ以外は1点。
+  screen_rule:
+    axis: AX-01
+    multi_screen_min: 2
+    factor_score: 2
   # 「判定例」シート。総合判定ロジックの回帰テスト（tests/test_standards.py）にだけ使う。
   example:
     sheet_pattern: "^判定例$"
@@ -68,7 +83,7 @@ cases:
   digest_exclude_sheets: ["^AI出力仕様$"]
   # 基準の文章（非数値セル）のフィンガープリント。ルール版の確認後に記入する。
   # null: 未承認として警告。値あり＋不一致: エラー（文章変更時はルール実装の確認が必要）。
-  approved_text_fingerprint: dd3150fcd98a4a8c5f7cfdb2a3662d397b718618f825cccef4afa8fbb6894b0a
+  approved_text_fingerprint: db3ea5aa4aa7bd23c2cd8a5c92de171337cc5e603628a700f44c2d4601982f9a
 
 common:
   version:
@@ -90,6 +105,17 @@ common:
     # キー列（種別ID|難易度）として既に結合済みの列がある場合の候補。あれば照合に使う。
     optional_columns:
       key: ["参照キー", "工数キー", "キー", "re:^工数キー"]
+  # 共通作業の立て方（共通基準 構成と重複防止 BOUND-16〜18）の照合（検証器の警告）。基準の数値ではなく検証の対象指定。
+  #   required_types: 構成案ごとに必ず立てる種別（REQUIRED_COMPONENT_MISSING）
+  #   min_users: 種別ごとの最小利用数。used_by のケースと depends_on で依存する部品の合計（COMPONENT_SINGLE_USE）
+  component_rules:
+    required_types: [BASE, RUN]
+    min_users: {FLOW: 2, COMP: 2}
+  # PAGEの難易度（共通基準 構成と重複防止 BOUND-19）の照合（検証器の警告 PAGE_DIFFICULTY_RULE 等）。
+  # screen_profiles から画面ごとの期待難易度を求める: complex_ui→High、dynamic_list/dialog/file または inputs≥mid_inputs_min→Mid、他はLow。
+  page_rule:
+    type_id: PAGE
+    mid_inputs_min: 6
   # 「判定集計例」シート。回帰テスト（算定済み小計の再計算）にだけ使う。本番計算には使わない。
   # v0.1実ファイル: 判定集計例!A1:P13（集計は B17:B19 = N/O/P列 2〜13行の合計）
   example:
@@ -101,5 +127,5 @@ common:
     optional_columns:
       status: ["見積状態", "状態", "算定状態"]
       kind: ["実装区分"]
-  digest_exclude_sheets: ["^AI出力仕様$"]
-  approved_text_fingerprint: e440b7241a431f85a54a05ccbdf895fefe729674505c232613abe18910fcb599
+  digest_exclude_sheets: ["^AI出力仕様$", "^工数表$"]   # 工数表は数値表のため省く（値は standards.json、全文は common.md）
+  approved_text_fingerprint: c2feaa2ddeb420f5df674eab817146740c003e87d12b697726fac79f649151fd

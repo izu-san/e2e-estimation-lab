@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "architectures": [
+    {
+      "arch_id": "A1",
+      "name": "POMあり",
+      "assumptions": []
+    }
+  ],
+  "components": [
+    {
+      "responsibility": "実行基盤（設定・ブラウザー起動）を持つ",
+      "need_reason": "全ケースの実行に必要",
+      "used_by": [
+        "C-001",
+        "C-002"
+      ],
+      "depends_on": [],
+      "integrated_into": null,
+      "component_id": "BASE-1",
+      "arch_ids": [
+        "A1"
+      ],
+      "type_id": "BASE",
+      "name": "基盤",
+      "implementation_kind": "新規",
+      "elements": [
+        "BASE"
+      ],
+      "cost_owner": "BASE-1"
+    },
+    {
+      "responsibility": "PG-List・PG-Detail のページオブジェクトを持つ",
+      "need_reason": "C-001 が一覧と詳細の画面を操作するため",
+      "used_by": [
+        "C-001"
+      ],
+      "depends_on": [
+        "BASE-1"
+      ],
+      "integrated_into": null,
+      "component_id": "PAGE-1",
+      "arch_ids": [
+        "A1"
+      ],
+      "type_id": "PAGE",
+      "name": "ページ",
+      "implementation_kind": "新規",
+      "elements": [
+        "PG-List",
+        "PG-Detail"
+      ],
+      "cost_owner": "PAGE-1"
+    }
+  ]
+}

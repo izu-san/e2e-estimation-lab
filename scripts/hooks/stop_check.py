@@ -32,8 +32,10 @@ def main() -> int:
     counter.parent.mkdir(exist_ok=True)
     counter.write_text(str(n + 1))
     emit({"decision": "block",
-          "reason": f"必須成果物が未作成です: {missing}。工程を続けるか、続けられない理由を "
-                    f"ai/questions.json と最終報告に記録してください（この通知は最大{MAX_NOTIFY}回）。"})
+          "reason": f"必須成果物が未作成です: {missing}。工程を続けてください。"
+                    "Bash は scripts/estimator <サブコマンド> の単独実行なら使えます（ls/cat・&&・パイプは不可。"
+                    "ファイルは Read/Glob/Grep で読む）。scripts/estimator を実際に試しても進めない場合だけ、"
+                    f"理由を ai/questions.json と最終報告に記録して終えてください（この通知は最大{MAX_NOTIFY}回）。"})
     return 0
 
 
