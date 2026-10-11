@@ -425,6 +425,7 @@ def load_common_standard(path: Path, spec: dict) -> dict:
         "version": ver, "rule_version": COMMON_RULE_VERSION,
         "effort": effort, "type_ids": known, "types_with_effort": present_types,
         "component_rules": spec.get("component_rules"),
+        "page_rule": spec.get("page_rule"),
         "effort_table_location": f"{hit['sheet']['name']}!R{hit['header_row']}",
         "example": example,
         "text_fingerprint": fp, "text_approval": approval,

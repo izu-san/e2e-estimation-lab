@@ -59,3 +59,7 @@
 | SCREEN_NOT_IN_PAGE（警告） | `operation_screens` の画面名を PAGE の `elements` と揃える（共通基準 BOUND-15） |
 | REQUIRED_COMPONENT_MISSING（警告） | 構成案に BASE・RUN を立てる。要件が不明なら仮定を置き質問に残す（BOUND-18） |
 | COMPONENT_SINGLE_USE（警告） | FLOW・COMP は2件以上が使うものだけ（BOUND-16・17）。1ケースだけならケースや PAGE に含める |
+| PAGE_NO_PROFILE（警告） | PAGE の判定に `screen_profiles`（画面ごとの inputs・dynamic_list・dialog・file・complex_ui）を書く（共通基準 BOUND-19） |
+| PAGE_PROFILE_MISMATCH（警告） | `screen_profiles` の画面を、その PAGE の `elements` と一致させる |
+| PAGE_MIXED_DIFFICULTY（警告） | 期待難易度の違う画面が1つの PAGE 部品にある。難易度ごとに部品を分ける（BOUND-13・19） |
+| PAGE_DIFFICULTY_RULE（警告） | 画面の特徴から決まる難易度に合わせる。特徴の記録が事実と違うなら特徴の方を直す |

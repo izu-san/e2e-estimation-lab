@@ -200,6 +200,49 @@
           "conditions": {
             "$ref": "defs.schema.json#/$defs/text_list",
             "description": "条件付きの仮定・影響・再見積条件"
+          },
+          "screen_profiles": {
+            "type": "array",
+            "description": "PAGEの画面（構成要素）ごとの特徴。共通基準 BOUND-19 の難易度判定に使う事実だけを書く",
+            "items": {
+              "type": "object",
+              "required": [
+                "element",
+                "inputs",
+                "dynamic_list",
+                "dialog",
+                "file",
+                "complex_ui"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "element": {
+                  "type": "string",
+                  "description": "PAGEの構成要素ID（elements と同じ）"
+                },
+                "inputs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "ケース・共通部品がこの画面で操作する入力・選択項目の数（項目書と入力値定義から数える）"
+                },
+                "dynamic_list": {
+                  "type": "boolean",
+                  "description": "件数・内容が変わる一覧や検索結果を扱う"
+                },
+                "dialog": {
+                  "type": "boolean",
+                  "description": "モーダル・確認ダイアログを扱う"
+                },
+                "file": {
+                  "type": "boolean",
+                  "description": "ファイルのアップロード・ダウンロードを扱う"
+                },
+                "complex_ui": {
+                  "type": "boolean",
+                  "description": "iframe・ドラッグ・仮想スクロール等の複雑な動的UIを扱う"
+                }
+              }
+            }
           }
         }
       }

@@ -437,10 +437,53 @@ def validate_assessments(rd: Path) -> list[dict]:
         for q in ca.get("question_ids", []):
             if q not in q_ids:
                 errs.append(E("UNKNOWN_QUESTION", p, f"question_id {q} が questions.json にありません"))
+    errs += _page_rule(data, comps, std)
     for cid, c in comps.items():
         if c["implementation_kind"] in ("新規", "改修") and c["cost_owner"] == cid and cid not in seen_c:
             errs.append(E("UNASSESSED", "common_assessments", f"{cid} の難易度判定がありません（未算定になります）",
                           "warning"))
+    return errs
+
+
+def page_expected_difficulty(profile: dict, rule: dict) -> str:
+    """画面の特徴から期待難易度を求める（共通基準 BOUND-19 の仮ルール）。"""
+    if profile["complex_ui"]:
+        return "High"
+    if profile["dynamic_list"] or profile["dialog"] or profile["file"] or profile["inputs"] >= rule["mid_inputs_min"]:
+        return "Mid"
+    return "Low"
+
+
+def _page_rule(data: dict, comps: dict, std: dict) -> list[dict]:
+    """PAGEの難易度を画面の特徴（screen_profiles）と照合する（警告）。難易度の違う画面を1部品にまとめていないかも見る。"""
+    rule = std["common"].get("page_rule") or {}
+    if not rule:
+        return []
+    errs: list[dict] = []
+    for n, ca in enumerate(data["common_assessments"]):
+        c = comps.get(ca["component_id"])
+        if not c or c["type_id"] != rule["type_id"] or ca["difficulty"] not in ("Low", "Mid", "High"):
+            continue
+        p = f"common_assessments/{n}({ca['component_id']})"
+        profiles = ca.get("screen_profiles")
+        if not profiles:
+            errs.append(E("PAGE_NO_PROFILE", p, "screen_profiles（画面ごとの入力数・一覧・ダイアログ・ファイル・複雑UI）がありません"
+                                                "（共通基準 BOUND-19）", "warning"))
+            continue
+        got = [pr["element"] for pr in profiles]
+        if sorted(got) != sorted(c["elements"]):
+            errs.append(E("PAGE_PROFILE_MISMATCH", p, f"screen_profiles の画面 {sorted(got)} が elements {sorted(c['elements'])} と一致しません",
+                          "warning"))
+        expected = {pr["element"]: page_expected_difficulty(pr, rule) for pr in profiles}
+        levels = set(expected.values())
+        if len(levels) > 1:
+            errs.append(E("PAGE_MIXED_DIFFICULTY", p,
+                          "難易度の違う画面を1つのPAGE部品にまとめています（"
+                          + "、".join(f"{k}={v}" for k, v in sorted(expected.items()))
+                          + "）。難易度ごとに部品を分けてください（共通基準 BOUND-13・BOUND-19）", "warning"))
+        elif ca["difficulty"] not in levels:
+            errs.append(E("PAGE_DIFFICULTY_RULE", p, f"difficulty={ca['difficulty']} ですが、画面の特徴からは {levels.pop()} です"
+                                                     "（共通基準 BOUND-19）", "warning"))
     return errs
 
 

@@ -50,6 +50,11 @@
 - 条件付きにする場合は `conditions` に仮定・影響・再見積条件を書く（COM-09）。
 - `matched_conditions` に当てはめた条件、`standard_refs` に `common:シート名!セル`、`rationale` に理由。
 - `cost_owner` が自分自身の 新規/改修 作業はすべて判定する（無いと未算定）。
+- **PAGE の難易度（共通基準 BOUND-19）:** 画面ごとに `screen_profiles` へ事実を書き、そこから難易度を決める。
+  `inputs`（その画面で操作する入力・選択項目の数。項目書と入力値定義から数える）、`dynamic_list`（件数・内容が変わる一覧・検索結果）、
+  `dialog`（モーダル・確認ダイアログ）、`file`（アップロード・ダウンロード）、`complex_ui`（iframe・ドラッグ等）。
+  complex_ui なら High、dynamic_list・dialog・file のどれか、または inputs が6以上なら Mid、それ以外は Low。
+  難易度の違う画面は1つの PAGE 部品にまとめず分ける（`PAGE_NO_PROFILE` / `PAGE_MIXED_DIFFICULTY` / `PAGE_DIFFICULTY_RULE` 警告）。
 
 ## 共通構成を変えたら
 `common_design.json` を変更すると採点・計算は stale になる。影響する `used_by` のケースを再採点してから再計算する。

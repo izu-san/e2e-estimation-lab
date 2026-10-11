@@ -239,3 +239,26 @@ def test_component_rules(run, capsys):
     write_json(rd / "ai/common_design.json", d)
     warns = _stage(capsys, "common_design")[2]
     assert not {"REQUIRED_COMPONENT_MISSING", "COMPONENT_SINGLE_USE"} & warns
+
+
+def test_page_difficulty_rule(run, capsys):
+    """PAGEの難易度を画面の特徴から照合する（共通基準 BOUND-19 の仮ルール）。"""
+    rd, _ = run
+    a = assessments()
+    page = a["common_assessments"][1]  # PAGE-1: Mid, elements PG-List / PG-Detail
+    prof = lambda el, **kw: {"element": el, "inputs": 1, "dynamic_list": False, "dialog": False, "file": False,  # noqa: E731
+                             "complex_ui": False, **kw}
+    assert "PAGE_NO_PROFILE" in _stage(capsys, "assessments")[2]
+    page["screen_profiles"] = [prof("PG-List", dynamic_list=True), prof("PG-Detail")]
+    write_json(rd / "ai/assessments.json", a)
+    assert "PAGE_MIXED_DIFFICULTY" in _stage(capsys, "assessments")[2]  # Mid と Low の混在
+    page["screen_profiles"] = [prof("PG-List", dynamic_list=True), prof("PG-Detail", inputs=6)]
+    write_json(rd / "ai/assessments.json", a)
+    warns = _stage(capsys, "assessments")[2]
+    assert not {"PAGE_MIXED_DIFFICULTY", "PAGE_DIFFICULTY_RULE", "PAGE_PROFILE_MISMATCH"} & warns
+    page["difficulty"] = "Low"
+    write_json(rd / "ai/assessments.json", a)
+    assert "PAGE_DIFFICULTY_RULE" in _stage(capsys, "assessments")[2]
+    page["screen_profiles"] = [prof("PG-List")]
+    write_json(rd / "ai/assessments.json", a)
+    assert "PAGE_PROFILE_MISMATCH" in _stage(capsys, "assessments")[2]
