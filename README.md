@@ -8,6 +8,8 @@ Excelのテスト項目書を読み込み、**基準Excelに書かれた判定�
 - **はじめに読む**: [docs/handover.md](docs/handover.md)（最初の1時間の手順）
 - 新しい案件に使う: [docs/new_project.md](docs/new_project.md)
 - 用語集: [docs/glossary.md](docs/glossary.md)
+- 内部構造（開発者向け）: [docs/architecture.md](docs/architecture.md)
+- 評価の読み方: [docs/evaluation_guide.md](docs/evaluation_guide.md)
 - 結果のレビュー: [docs/review_guide.md](docs/review_guide.md)
 - エラー対処: [docs/troubleshooting.md](docs/troubleshooting.md)
 - 基準Excelの変更: [docs/standards_update.md](docs/standards_update.md)
@@ -281,6 +283,8 @@ scripts/permission_check.sh [--keep]
 使い捨てのディレクトリに人工データを複製し、見積もりモードでClaude Codeを実際に起動して、書込み制限が効いているかを**実行前後のファイル状態**で判定します（AIの返答では判定しません）。結果は `runs/permission_check_*.json`。AIの利用料がかかります。
 
 ### 評価（ばらつきの測定）
+
+読み方の詳細は [docs/evaluation_guide.md](docs/evaluation_guide.md) を参照してください。現在の期待事項はいずれも人確認済みではないため、評価結果は「暫定」です。
 
 ```bash
 scripts/estimator evaluate --suite evals/suites/automationexercise.yaml

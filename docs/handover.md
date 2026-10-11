@@ -98,6 +98,8 @@ scripts/start-estimate-session.sh --input inputs/AutomationExercise_01_詳細形
 | 基準Excelを変えたい | [standards_update.md](standards_update.md) |
 | 新しい案件に適用する | [new_project.md](new_project.md) |
 | 用語がわからない | [glossary.md](glossary.md) |
+| ツールを改修したい | [architecture.md](architecture.md) |
+| 評価結果の読み方 | [evaluation_guide.md](evaluation_guide.md) |
 | コマンドの使い方 | [README.md](../README.md) の「コマンド一覧」 |
 | なぜこの設計なのか | [設計書](ClaudeCode_E2E_Estimator_Implementation_Guide_v1.1.md) |
 | 精度や残っている課題 | [poc_report.md](poc_report.md) |
