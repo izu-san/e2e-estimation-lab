@@ -54,9 +54,16 @@
 | PENDING_SPLIT_CASE（警告） | 分解したケースの一部だけが要確認。仕様未提示の部分を切り出しただけなら、ケースをやめて原項目の `pending_parts` に保留する |
 | AXIS_COMPONENT_OVERLAP（警告） | DATA/FIX を使うケースの AX-05、FLOW を使うケースの AX-01 が2点以上。部品の作業を除いて残るケース固有の作業を軸の `overlap_note` に書くか、点数を見直す |
 | PREMISE_ROW_UNTRACED（警告） | 資料情報・前提の行が質問にも premise_reviews にもない。前提・未確定事項なら質問/仮定にして `refs` に行を入れ、影響がなければ `premise_reviews` に理由を書く |
-| AX01_NO_SCREENS（警告） | AX-01 に `operation_screens`（ケースが自分で操作した画面。PAGE の elements と同じID）を書く（個別基準 COST-13） |
+| AX01_NO_SCREENS（警告） | AX-01 に `operation_screens`（ケースが自分で操作した画面。画面一覧の screen_id）を書く（個別基準 COST-13） |
 | AX01_SCREEN_RULE（警告） | 操作した画面が2つ以上か、`factors`（branch/dialog/file）があれば2点、それ以外は1点。判定だけの遷移先と共通部品に委ねた操作は数えない |
-| SCREEN_NOT_IN_PAGE（警告） | `operation_screens` の画面名を PAGE の `elements` と揃える（共通基準 BOUND-15） |
+| SCREENS_MISSING | 共通設計の前に画面一覧 `ai/screens.json` を作り、`validate-stage --stage screens` を通す |
+| SCREEN_NOT_IN_PAGE | 画面一覧の画面が構成案のPAGEの `elements` に無い。PAGE に含めるか、数えないなら画面一覧の `not_counted` へ移す |
+| PAGE_NOT_IN_SCREENS | PAGE の `elements` に画面一覧外のIDがある。画面一覧の `screen_id` を使う（画面を足すなら画面一覧から） |
+| SCREEN_NOT_IN_INVENTORY | AX-01 の `operation_screens` に画面一覧外のIDがある。画面一覧の `screen_id` から選ぶ |
+| SCREEN_NOT_OPERATED（警告） | 画面一覧でそのケースの `operated_by` に無い画面を操作画面にしている。確認だけの画面は数えない。一覧の誤りなら一覧を直す |
+| CASE_NO_SCREEN（警告） | どの画面の `operated_by`・`checked_by` にも無いケースがある。ケースが操作・確認する画面を一覧に入れる |
+| OBSERVED_WITHOUT_SURVEY | 対象サイトの調査結果（`survey/`）が無いのに `basis: observed`。項目書から推定した画面は `inferred` |
+| SCREEN_ROLE_OVERLAP | 同じケースが `operated_by` と `checked_by` の両方にある。操作するなら `operated_by` だけ |
 | REQUIRED_COMPONENT_MISSING（警告） | 構成案に BASE・RUN を立てる。要件が不明なら仮定を置き質問に残す（BOUND-18） |
 | COMPONENT_SINGLE_USE（警告） | FLOW・COMP は2件以上が使うものだけ（BOUND-16・17）。1ケースだけならケースや PAGE に含める |
 | PAGE_NO_PROFILE（警告） | PAGE の判定に `screen_profiles`（画面ごとの inputs・dynamic_list・dialog・file・complex_ui）を書く（共通基準 BOUND-19） |

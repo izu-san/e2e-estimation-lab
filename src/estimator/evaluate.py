@@ -101,7 +101,7 @@ def evaluate_run(rd: Path, exp: dict) -> list[dict]:
 
 # ------------------------------------------------------------------ 形式横断の一貫性
 
-AI_OUTPUTS = ("ai/normalized_cases.json", "ai/common_design.json", "ai/assessments.json")
+AI_OUTPUTS = ("ai/normalized_cases.json", "ai/screens.json", "ai/common_design.json", "ai/assessments.json")
 
 
 def run_metrics(rd: Path) -> dict | None:

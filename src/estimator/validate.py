@@ -220,6 +220,87 @@ def _cycles(graph: dict[str, list[str]]) -> list[list[str]]:
     return found
 
 
+def validate_screens(rd: Path) -> list[dict]:
+    """画面一覧（ai/screens.json）。PAGEの構成要素とAX-01の操作画面の語彙を、共通設計より前に1つに確定させる。"""
+    data, errs = _load(rd, "ai/screens.json")
+    if data is None:
+        return errs
+    errs = schema_errors("screens", data)
+    if errs:
+        return errs
+    norm, e1 = _load(rd, "ai/normalized_cases.json")
+    if e1:
+        return e1
+    sheets = _sheet_index(read_json(rd / "raw_workbook.json"))
+    case_ids = {c["case_id"] for c in norm["cases"]}
+    ids = [s["screen_id"] for s in data["screens"]]
+    for d in _dupes(ids):
+        errs.append(E("DUPLICATE_ID", "screens", f"screen_id {d} が重複しています"))
+    surveyed = (rd / "survey").is_dir() and any((rd / "survey").iterdir())
+    seen_cases: set[str] = set()
+    for n, sc in enumerate(data["screens"]):
+        p = f"screens/{n}({sc['screen_id']})"
+        for k, ref in enumerate(sc["refs"]):
+            errs += _check_ref(ref, sheets, f"{p}/refs/{k}")
+        if sc["basis"] == "inferred" and not sc["refs"]:
+            errs.append(E("NO_REF", p, "項目書から推定した画面には、画面が現れる原資料の位置 refs が必要です"))
+        if sc["basis"] == "observed" and not surveyed:
+            errs.append(E("OBSERVED_WITHOUT_SURVEY", p, "basis=observed ですが、対象サイトの調査結果（survey/）がありません。"
+                                                        "項目書から推定した画面は inferred にしてください"))
+        for fld in ("operated_by", "checked_by"):
+            for c in sc[fld]:
+                if c not in case_ids:
+                    errs.append(E("UNKNOWN_CASE", f"{p}/{fld}", f"ケース {c} が存在しません"))
+                seen_cases.add(c)
+        both = sorted(set(sc["operated_by"]) & set(sc["checked_by"]))
+        if both:
+            errs.append(E("SCREEN_ROLE_OVERLAP", p, f"{', '.join(both)} が operated_by と checked_by の両方にあります。"
+                                                    "その画面で入力・クリックするなら operated_by だけにしてください"))
+    for n, nc in enumerate(data["not_counted"]):
+        if nc["merged_into"] is not None and nc["merged_into"] not in ids:
+            errs.append(E("UNKNOWN_SCREEN", f"not_counted/{n}", f"merged_into {nc['merged_into']} が screens にありません"))
+        for k, ref in enumerate(nc.get("refs", [])):
+            errs += _check_ref(ref, sheets, f"not_counted/{n}/refs/{k}")
+    for c in sorted(case_ids - seen_cases):
+        errs.append(E("CASE_NO_SCREEN", "screens", f"ケース {c} がどの画面の operated_by・checked_by にもありません。"
+                                                   "ケースが操作・確認する画面を一覧に入れてください", "warning"))
+    return errs
+
+
+def _screen_ids(rd: Path) -> tuple[dict | None, list[dict]]:
+    data, errs = _load(rd, "ai/screens.json")
+    if errs:
+        return None, [E("SCREENS_MISSING", "ai/screens.json", "画面一覧（ai/screens.json）がありません。"
+                                                              "共通設計の前に画面一覧を作り validate-stage --stage screens を通してください")]
+    if schema_errors("screens", data):
+        return None, [E("SCREENS_INVALID", "ai/screens.json", "画面一覧がスキーマに合いません（validate-stage --stage screens）")]
+    return data, []
+
+
+def _page_inventory(design: dict, screens: dict) -> list[dict]:
+    """PAGEの構成要素を画面一覧と一致させる（共通基準 BOUND-15。数量の合計＝画面数）。"""
+    inventory = {s["screen_id"] for s in screens["screens"]}
+    errs: list[dict] = []
+    for arch in design["architectures"]:
+        pages = [c for c in design["components"] if c["type_id"] == "PAGE" and arch["arch_id"] in c["arch_ids"]
+                 and c["implementation_kind"] != "対象外"]
+        if not pages:
+            continue
+        got: set[str] = set()
+        for c in pages:
+            unknown = sorted(set(c["elements"]) - inventory)
+            if unknown:
+                errs.append(E("PAGE_NOT_IN_SCREENS", f"components({c['component_id']})",
+                              f"画面一覧に無い構成要素です: {', '.join(unknown)}。PAGEの elements は ai/screens.json の screen_id から選んでください"))
+            got |= set(c["elements"])
+        missing = sorted(inventory - got)
+        if missing:
+            errs.append(E("SCREEN_NOT_IN_PAGE", f"architectures({arch['arch_id']})",
+                          f"構成案 {arch['arch_id']} のPAGEに画面一覧の {', '.join(missing)} がありません"
+                          "（共通基準 BOUND-15: PAGEの数量の合計は画面数と一致させる）。画面一覧を直すか、PAGEに含めてください"))
+    return errs
+
+
 def validate_common_design(rd: Path) -> list[dict]:
     data, errs = _load(rd, "ai/common_design.json")
     if data is None:
@@ -300,6 +381,8 @@ def validate_common_design(rd: Path) -> list[dict]:
     for cyc in _cycles({c["component_id"]: c["depends_on"] for c in comps}):
         errs.append(E("DEPENDENCY_CYCLE", "components", f"依存関係が循環しています: {' → '.join(cyc)}"))
     errs += _component_rules(data, std)
+    screens, e_scr = _screen_ids(rd)
+    errs += e_scr if screens is None else _page_inventory(data, screens)
     return errs
 
 
@@ -399,7 +482,7 @@ def validate_assessments(rd: Path) -> list[dict]:
                 errs.append(E("UNKNOWN_QUESTION", p, f"question_id {q} が questions.json にありません"))
     errs += _pending_split_cases(data, norm)
     errs += _component_overlap(data, design, std)
-    errs += _screen_rule(data, design, std)
+    errs += _screen_rule(data, std, _screen_ids(rd)[0])
     errs += _usage_consistency(data, design)
     errs += _question_links(data, design, norm, rd)
     errs += _bare_evidence_refs(data)
@@ -535,39 +618,40 @@ def _component_overlap(data: dict, design: dict, std: dict) -> list[dict]:
     return errs
 
 
-def _screen_rule(data: dict, design: dict, std: dict) -> list[dict]:
+def _screen_rule(data: dict, std: dict, screens: dict | None) -> list[dict]:
     """操作手順の軸の画面の数え方（個別基準 計上ルール COST-13）。operation_screens と factors から期待点を求めて照合し、
-    画面がPAGEの構成要素にあるかも確かめる（警告）。軸と画面数はアダプター（cases.screen_rule）から取る。"""
+    画面が画面一覧にあり、一覧でそのケースが操作する画面かも確かめる。軸と画面数はアダプター（cases.screen_rule）から取る。"""
     rule = std["cases"].get("screen_rule") or {}
     if not rule:
         return []
     errs: list[dict] = []
-    pages: dict[str, set[str]] = {}
-    for c in design["components"]:
-        if c["type_id"] == "PAGE" and c["implementation_kind"] != "対象外":
-            for arch in c["arch_ids"]:
-                pages.setdefault(arch, set()).update(c["elements"])
+    inventory = {s["screen_id"]: s for s in (screens or {}).get("screens", [])}
     for n, a in enumerate(data["case_assessments"]):
         v = a["axes"].get(rule["axis"])
         if not v or v["score"] not in (1, rule["factor_score"]) or v["score"] == 3:
             continue
         p = f"case_assessments/{n}({a['case_id']})/axes/{rule['axis']}"
-        screens = v.get("operation_screens")
-        if screens is None:
+        screens_used = v.get("operation_screens")
+        if screens_used is None:
             errs.append(E("AX01_NO_SCREENS", p, "操作した画面 operation_screens がありません（個別基準 計上ルール COST-13）。"
-                                                 "ケースが自分で操作する画面をPAGEの構成要素IDで列挙してください", "warning"))
+                                                 "ケースが自分で操作する画面を画面一覧の screen_id で列挙してください", "warning"))
             continue
-        n_screens = len(set(screens))
+        n_screens = len(set(screens_used))
         expected = rule["factor_score"] if n_screens >= rule["multi_screen_min"] or v.get("factors") else 1
         if v["score"] != expected:
             errs.append(E("AX01_SCREEN_RULE", p,
                           f"{rule['axis']}={v['score']} ですが、操作した画面 {n_screens} 件・要因 {v.get('factors') or 'なし'} からは "
                           f"{expected} 点です（個別基準 計上ルール COST-13）。判定だけの遷移先と共通部品に委ねた操作は数えません", "warning"))
-        for arch in a["arch_ids"]:
-            unknown = sorted(set(screens) - pages.get(arch, set()))
-            if pages.get(arch) and unknown:
-                errs.append(E("SCREEN_NOT_IN_PAGE", p, f"構成案 {arch} のPAGE構成要素に無い画面です: {', '.join(unknown)}"
-                                                       "（共通基準 BOUND-15。画面の名前をPAGEの elements と揃える）", "warning"))
+        if screens is None:
+            continue
+        unknown = sorted(set(screens_used) - set(inventory))
+        if unknown:
+            errs.append(E("SCREEN_NOT_IN_INVENTORY", p, f"画面一覧（ai/screens.json）に無い画面です: {', '.join(unknown)}"))
+        not_operated = sorted(s for s in set(screens_used) & set(inventory)
+                              if a["case_id"] not in inventory[s]["operated_by"])
+        if not_operated:
+            errs.append(E("SCREEN_NOT_OPERATED", p, f"画面一覧では {a['case_id']} が操作しない画面です: {', '.join(not_operated)}。"
+                                                    "確認だけの画面は数えません。一覧が誤りなら画面一覧を直してください", "warning"))
     return errs
 
 
@@ -937,6 +1021,7 @@ def review_resolution_counts(rd: Path) -> dict[str, int] | None:
 
 STAGE_VALIDATORS = {
     "normalize": validate_normalize,
+    "screens": validate_screens,
     "common_design": validate_common_design,
     "assessments": validate_assessments,
     "questions": validate_questions,

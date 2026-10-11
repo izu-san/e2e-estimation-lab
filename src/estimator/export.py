@@ -188,6 +188,16 @@ def export(rd: Path) -> dict:
     _table(ws, ["種別", "ID", "原ID", "ID区分", "タイトル/先頭", "出典", "手順数", "期待結果数", "データパターン数",
                 "処遇", "統合先", "対応ケース", "理由", "保留した未確定部分"], data, {5: 40, 6: 30, 13: 40, 14: 40})
 
+    # 画面一覧（PAGEの構成要素とAX-01の操作画面の元）
+    screens = screens_doc(rd)
+    ws = wb.create_sheet("画面一覧")
+    data = [[sc["screen_id"], sc["name"], sc["url"], SCREEN_BASIS_LABELS[sc["basis"]], sc["operated_by"], sc["checked_by"],
+             sc["evidence"], _ref_str(sc["refs"])] for sc in screens["screens"]]
+    data += [[nc["merged_into"], nc["name"], None, "数えない", None, None, nc["reason"], _ref_str(nc.get("refs", []))]
+             for nc in screens["not_counted"]]
+    _table(ws, ["screen_id", "画面", "URL", "根拠", "操作するケース", "確認だけのケース", "判断の根拠", "出典"], data,
+           {2: 28, 7: 50, 8: 30})
+
     # 確認事項
     ws = wb.create_sheet("確認事項")
     _table(ws, ["question_id", "種類", "対象", "内容", "影響", "仮の扱い", "状態"],
@@ -248,8 +258,27 @@ def export(rd: Path) -> dict:
     ws.column_dimensions["B"].width = 120
 
     atomic_save_workbook(wb, rd / "estimate.xlsx")
-    write_text(rd / "summary.md", render_summary(man, est, val, questions, conds, norm, findings))
+    write_text(rd / "summary.md", render_summary(man, est, val, questions, conds, norm, findings, screens))
     return {"xlsx": str(rd / "estimate.xlsx"), "summary": str(rd / "summary.md")}
+
+
+SCREEN_BASIS_LABELS = {"inferred": "項目書から推定", "observed": "サイト調査で確認"}
+
+
+def screens_doc(rd: Path) -> dict:
+    p = rd / "ai/screens.json"
+    return read_json(p) if p.exists() else {"screens": [], "not_counted": []}
+
+
+def _screen_lines(screens: dict) -> list[str]:
+    if not screens["screens"]:
+        return []
+    basis: dict[str, int] = {}
+    for sc in screens["screens"]:
+        basis[sc["basis"]] = basis.get(sc["basis"], 0) + 1
+    return [f"- 画面一覧: {len(screens['screens'])}画面（"
+            + "、".join(f"{SCREEN_BASIS_LABELS[k]} {v}" for k, v in sorted(basis.items()))
+            + f"）、数えなかった候補 {len(screens['not_counted'])}件"]
 
 
 RESOLUTION_LABELS = {"fixed": "修正済", "question": "質問化", "rejected": "不採用", "deferred": "未対応"}
@@ -313,7 +342,7 @@ def _mapping_lines(norm: dict | None) -> list[str]:
 
 
 def render_summary(man: dict, est: dict, val: dict, questions: list[dict], conds: list[dict],
-                   norm: dict | None = None, findings: list[dict] | None = None) -> str:
+                   norm: dict | None = None, findings: list[dict] | None = None, screens: dict | None = None) -> str:
     st = val["status"]
     out = [f"# 見積もり結果 {man['run_id']}", "",
            f"- 入力: {', '.join(i['file_name'] for i in man['inputs'])}",
@@ -321,6 +350,7 @@ def render_summary(man: dict, est: dict, val: dict, questions: list[dict], conds
            f"(エラー{val['machine']['error_count']}件, 警告{val['machine']['warning_count']}件)",
            f"- semantic_review_status: {st['semantic_review_status']}",
            *_mapping_lines(norm),
+           *_screen_lines(screens or {"screens": [], "not_counted": []}),
            *_warning_lines(val),
            f"- 基準: 個別 {man['standards']['cases'].get('version')} / 共通 {man['standards']['common'].get('version')}",
            "", f"> {est['note']}", ""]

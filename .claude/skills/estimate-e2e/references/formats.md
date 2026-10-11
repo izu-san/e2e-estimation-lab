@@ -27,6 +27,22 @@
 }
 ```
 
+## ai/screens.json
+```json
+{
+  "schema_version": 1,
+  "screens": [
+    {"screen_id": "PG-Login", "name": "ログイン画面", "url": null, "basis": "inferred",
+     "evidence": "手順「Signup / Loginをクリック」の後に「Login to your account が表示される」",
+     "refs": [{"workbook_id": "W1", "sheet": "テスト項目", "range": "D5"}],
+     "operated_by": ["C-001", "C-002"], "checked_by": []}
+  ],
+  "not_counted": [
+    {"name": "削除確認ダイアログ", "reason": "同じ画面のモーダル（遷移の記述なし）", "merged_into": "PG-Cart"}
+  ]
+}
+```
+
 ## ai/common_design.json
 ```json
 {

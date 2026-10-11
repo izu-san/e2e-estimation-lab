@@ -207,7 +207,7 @@ def cmd_calculate(a) -> int:
     rd = run_dir(a.run)
     state = refresh_state(rd)
     blockers = []
-    for stage in ("normalize", "common_design", "assessments"):
+    for stage in ("normalize", "screens", "common_design", "assessments"):
         errs = STAGE_VALIDATORS[stage](rd)
         hard = [e for e in errs if e.get("severity", "error") == "error"]
         schema = [e for e in hard if e["code"] in ("SCHEMA", "MISSING_FILE", "INVALID_JSON")]
@@ -265,7 +265,7 @@ def cmd_validate(a) -> int:
     state = load_state(rd)
     repair = {s: {"failures": state["stages"].get(s, {}).get("failures", 0),
                   "status": state["stages"].get(s, {}).get("status")}
-              for s in ("normalize", "common_design", "assessments")}
+              for s in ("normalize", "screens", "common_design", "assessments")}
     exec_ok = est is not None and not machine["stages"]["sources"]["errors"] and \
         not machine["stages"]["standards"]["errors"] and \
         not any(e["code"] in ("RECOMPUTE_MISMATCH", "RECOMPUTE_FAILED", "RULE_VERSION_CHANGED") for e in machine["stages"]["calculate"]["errors"])

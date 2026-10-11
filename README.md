@@ -73,8 +73,8 @@ scripts/estimator extract --run ID                 # 構造抽出 → raw_workbo
 scripts/estimator render --run ID [--sheet S] [--rows 1-80]   # 座標つきテキスト表示
 scripts/estimator profile --run ID --sheet S [--rows 5-304] [--header-row 4] [--columns B,G] [--group-by B]
                                                    # 列ごとの値の分布（大規模資料の繰返し構造の把握）
-  （AI）ai/normalized_cases.json, ai/common_design.json, ai/questions.json, ai/assessments.json を作成（questionsは採点が参照するため採点より先）
-scripts/estimator validate-stage --run ID --stage normalize|common_design|questions|assessments|semantic_review
+  （AI）ai/normalized_cases.json, ai/screens.json（画面一覧）, ai/common_design.json, ai/questions.json, ai/assessments.json を作成（questionsは採点が参照するため採点より先）
+scripts/estimator validate-stage --run ID --stage normalize|screens|common_design|questions|assessments|semantic_review
 scripts/estimator calculate --run ID               # → estimate.json
 scripts/estimator validate --run ID                # → validation.json（再計算照合を含む）
 scripts/estimator export --run ID                  # → estimate.xlsx, summary.md
@@ -138,7 +138,7 @@ uv run pytest -q
 - `test_extract.py`: 結合セルを前方補完しない、非表示行/シート、数式キャッシュ無し、`=`始まりの文字列、列順・列名・シート名・ファイル名・説明行の変更、画像・コメント検出、非対応形式、出力時に数式化しない。
 - `test_pipeline.py`: CLI全工程、手編集した estimate.json の拒否、AIの計算値提出の拒否、領域の処遇漏れと修正上限、重複計上、重複候補の根拠、不正なセル参照、上流変更による無効化、入力変更検出、案件マニフェスト、入力欠落の記録。
 - `test_items.py`: 項目群の展開（複数行＋結合セル、IDなし、行数不整合、範囲外）、列の値による項目選択、.xlsm読込とVBA検出、大規模形式でのCLI全工程、見積もり状態規則（RULE-07・RULE-03）、共通作業のImpossible、条件一覧の出力。
-- `test_review_and_coverage.py`: 意味レビュー指摘の対応記録と状態、計算規則の版変更の区別、未確定部分の保留、共通部品との二重加点の警告、前提行の追跡、形式横断の一貫性評価。
+- `test_review_and_coverage.py`: 意味レビュー指摘の対応記録と状態、計算規則の版変更の区別、未確定部分の保留、共通部品との二重加点の警告、前提行の追跡、形式横断の一貫性評価、AX-01の画面の数え方・共通作業の立て方・PAGEの難易度の仮ルール、画面一覧とPAGE・AX-01の照合。
 - `test_calc_version.py`: 計算規則の版の上げ忘れ検出（固定入力の計算結果の指紋）。
 - `test_guardrails.py`: Hooks（保護対象への編集拒否、スキーマ通知、Stopの回数制限）と見積もり設定の生成。
 

@@ -43,19 +43,22 @@ CLIは `scripts/estimator <command>`。各コマンドはJSONを出力する。1
    例の確認や省略シートが必要なときだけ全文の `cases.md` / `common.md` を見る。値の照合は `runs/<id>/standards.json`。
 3. **項目整理** → `runs/<id>/ai/normalized_cases.json` を書く → `scripts/estimator validate-stage --run <id> --stage normalize`
    詳細: [references/normalize.md](references/normalize.md)
-4. **共通部分の設計** → `ai/common_design.json` → `validate-stage --stage common_design`
+4. **画面一覧** → `ai/screens.json` → `validate-stage --stage screens`
+   案件で扱う画面を先に一度だけ確定させる。PAGE の `elements` と AX-01 の `operation_screens` はこの一覧から選ぶ。
+   詳細: [references/screens.md](references/screens.md)
+5. **共通部分の設計** → `ai/common_design.json` → `validate-stage --stage common_design`
    詳細: [references/common-design.md](references/common-design.md)
-5. **確認事項・仮定・不可理由の起票** → `ai/questions.json`（0件でも `items: []`）→ `validate-stage --stage questions`
-   採点（工程6）が `question_ids` で参照するため先に作る。質問ID（`Q-001` 等）をここで採番する。
+6. **確認事項・仮定・不可理由の起票** → `ai/questions.json`（0件でも `items: []`）→ `validate-stage --stage questions`
+   採点（工程7）が `question_ids` で参照するため先に作る。質問ID（`Q-001` 等）をここで採番する。
    採点中に新しい質問・仮定が出たら `questions.json` に追記して `validate-stage --stage questions` をやり直す。
    資料情報・前提・未確定事項など説明・参考領域（role が description / reference）の**各行**を、質問の `refs` に入れるか、
    質問にしない理由を `premise_reviews` に書く（漏れは `PREMISE_ROW_UNTRACED` 警告）。実行環境の未調査事項、受入基準、
    公開サイトへの書込みの可否は質問・仮定に残りやすい漏れ。
-6. **個別ケースの5軸採点と共通作業の難易度** → `ai/assessments.json` → `validate-stage --stage assessments`
+7. **個別ケースの5軸採点と共通作業の難易度** → `ai/assessments.json` → `validate-stage --stage assessments`
    詳細: [references/assessment.md](references/assessment.md)
-7. **計算・検証・出力**: `scripts/estimator calculate --run <id>` → `validate --run <id>` → `export --run <id>`
-8. **意味レビュー（別パス）**: 結果を見直し、指摘を `ai/semantic_review.json` に書く（計算結果は書き換えない）→
-   各指摘に対応して `resolution`（fixed / question / rejected / deferred と note）を記録（直したら工程7をやり直す）→
+8. **計算・検証・出力**: `scripts/estimator calculate --run <id>` → `validate --run <id>` → `export --run <id>`
+9. **意味レビュー（別パス）**: 結果を見直し、指摘を `ai/semantic_review.json` に書く（計算結果は書き換えない）→
+   各指摘に対応して `resolution`（fixed / question / rejected / deferred と note）を記録（直したら工程8をやり直す）→
    `scripts/estimator mark-review --run <id> --by ai --context independent|self`。対応が未記録の指摘があると記録を拒否する。
    作成者と別コンテキストのレビュー役（サブエージェント）に任せられれば `independent`、本人が見直した場合は `self`。
    `mark-review` は既に出力済みの `validation.json`・`summary.md`・`estimate.xlsx` の意味レビュー状態も更新する。

@@ -53,6 +53,14 @@ def normalized():
     }
 
 
+def screens(cases=("C-001", "C-002")):
+    def sc(sid, rng, op):
+        return {"screen_id": sid, "name": sid, "url": None, "basis": "inferred", "evidence": "手順に遷移の記述",
+                "refs": [REF(rng)], "operated_by": op, "checked_by": []}
+    return {"schema_version": 1, "screens": [sc("PG-List", "C5", list(cases[:1])), sc("PG-Detail", "C6", list(cases[1:]))],
+            "not_counted": []}
+
+
 def design():
     base = {"responsibility": "r", "need_reason": "n", "used_by": [], "depends_on": [], "integrated_into": None}
     return {"schema_version": 1,
@@ -103,6 +111,7 @@ def run(tmp_path, capsys):
     assert run_cli(capsys, "extract", "--run", "t1")[0] == 0
     rd = Path(out["run_dir"])
     write_json(rd / "ai/normalized_cases.json", normalized())
+    write_json(rd / "ai/screens.json", screens())
     write_json(rd / "ai/common_design.json", design())
     write_json(rd / "ai/assessments.json", assessments())
     write_json(rd / "ai/questions.json", questions())
@@ -113,7 +122,7 @@ def test_full_pipeline(run, capsys):
     rd, srcs = run
     from estimator.io_utils import sha256_file
     before = [sha256_file(p) for p in srcs]
-    for st in ("normalize", "common_design", "questions", "assessments"):  # questionsは採点が参照するため先
+    for st in ("normalize", "screens", "common_design", "questions", "assessments"):  # questionsは採点が参照するため先
         code, out = run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)
         assert code == 0, out
     code, out = run_cli(capsys, "calculate", "--run", "t1")
@@ -130,18 +139,19 @@ def test_full_pipeline(run, capsys):
     code, out = run_cli(capsys, "export", "--run", "t1")
     assert code == 0, out
     wb = load_workbook(rd / "estimate.xlsx")
-    assert {"サマリー", "個別ケース", "共通作業", "原項目対応", "確認事項", "検証結果", "実行条件", "レビュー"} <= set(wb.sheetnames)
+    assert {"サマリー", "個別ケース", "共通作業", "原項目対応", "確認事項", "検証結果", "実行条件", "レビュー", "画面一覧"} <= set(wb.sheetnames)
     ws = wb["個別ケース"]
     hdr = [c.value for c in ws[1]]
     row2 = {h: c.value for h, c in zip(hdr, ws[3])}  # C-002
     assert row2["case_id"] == "C-002" and row2["標準"] is None and row2["estimate_status"] == "要確認"
     assert (rd / "summary.md").read_text().startswith("# 見積もり結果")
+    assert "- 画面一覧: 2画面（項目書から推定 2）" in (rd / "summary.md").read_text()
     assert [sha256_file(p) for p in srcs] == before
 
 
 def test_hand_edited_estimate_is_rejected(run, capsys):
     rd, _ = run
-    for st in ("normalize", "common_design", "assessments"):
+    for st in ("normalize", "screens", "common_design", "assessments"):
         run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)
     run_cli(capsys, "calculate", "--run", "t1")
     est = json.loads((rd / "estimate.json").read_text())
@@ -179,7 +189,7 @@ def test_assessments_require_questions_first(run, capsys):
 
 def test_mark_review_context(run, capsys):
     rd, _ = run
-    for st in ("normalize", "common_design", "questions", "assessments"):
+    for st in ("normalize", "screens", "common_design", "questions", "assessments"):
         assert run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)[0] == 0
     assert run_cli(capsys, "calculate", "--run", "t1")[0] == 0
     write_json(rd / "ai/semantic_review.json", {"schema_version": 1, "reviewer": "ai", "findings": []})
@@ -193,7 +203,7 @@ def test_mark_review_context(run, capsys):
 
 def test_mark_review_refreshes_exported_outputs(run, capsys):
     rd, _ = run
-    for st in ("normalize", "common_design", "questions", "assessments"):
+    for st in ("normalize", "screens", "common_design", "questions", "assessments"):
         assert run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)[0] == 0
     assert run_cli(capsys, "calculate", "--run", "t1")[0] == 0
     assert run_cli(capsys, "validate", "--run", "t1")[0] == 0
@@ -302,7 +312,7 @@ def test_bad_refs_detected(run, capsys):
 
 def test_source_change_detected_and_stale(run, capsys, tmp_path):
     rd, (c, m, cust) = run
-    for st in ("normalize", "common_design", "assessments"):
+    for st in ("normalize", "screens", "common_design", "assessments"):
         run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)
     run_cli(capsys, "calculate", "--run", "t1")
     # 共通設計を変更 → 下流（採点・計算）が無効化される

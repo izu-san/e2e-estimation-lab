@@ -16,7 +16,7 @@ FINDING = {"target": "C-001", "related": ["C-002"], "kind": "scoring", "message"
 
 
 def _through_export(capsys):
-    for st in ("normalize", "common_design", "questions", "assessments"):
+    for st in ("normalize", "screens", "common_design", "questions", "assessments"):
         assert run_cli(capsys, "validate-stage", "--run", "t1", "--stage", st)[0] == 0
     assert run_cli(capsys, "calculate", "--run", "t1")[0] == 0
     assert run_cli(capsys, "validate", "--run", "t1")[0] == 0
@@ -119,7 +119,7 @@ def test_pseudo_case_split_off_as_pending_warns(run, capsys):
     q = questions()
     q["items"][0]["targets"].append("C-001B")
     write_json(rd / "ai/questions.json", q)
-    for st in ("normalize", "common_design", "questions"):
+    for st in ("normalize", "screens", "common_design", "questions"):
         assert _stage(capsys, st)[0] == 0
     code, errors, warns = _stage(capsys, "assessments")
     assert code == 0 and "PENDING_SPLIT_CASE" in warns
@@ -182,7 +182,7 @@ def test_consistency_across_formats_and_reused_runs(run, capsys, tmp_path):
         assert code == 0, out
         assert run_cli(capsys, "extract", "--run", rid)[0] == 0
         rd = rd1.parent / rid
-        for f in ("normalized_cases", "common_design", "questions"):
+        for f in ("normalized_cases", "screens", "common_design", "questions"):
             shutil.copy(rd1 / f"ai/{f}.json", rd / f"ai/{f}.json")
         write_json(rd / "ai/assessments.json", assess)
         assert run_cli(capsys, "calculate", "--run", rid)[0] == 0
@@ -219,8 +219,44 @@ def test_ax01_screen_rule(run, capsys):
     del ax["factors"]
     ax["operation_screens"] = ["PG-List", "PG-Cart"]
     write_json(rd / "ai/assessments.json", a)
-    warns = _stage(capsys, "assessments")[2]
-    assert "AX01_SCREEN_RULE" not in warns and "SCREEN_NOT_IN_PAGE" in warns  # PG-Cart はPAGEの構成要素に無い
+    _, errors, warns = _stage(capsys, "assessments")
+    assert "AX01_SCREEN_RULE" not in warns and "SCREEN_NOT_IN_INVENTORY" in errors  # PG-Cart は画面一覧に無い
+    ax["operation_screens"] = ["PG-List", "PG-Detail"]
+    write_json(rd / "ai/assessments.json", a)
+    _, errors, warns = _stage(capsys, "assessments")
+    assert "SCREEN_NOT_IN_INVENTORY" not in errors and "SCREEN_NOT_OPERATED" in warns  # 一覧では PG-Detail は C-002 が操作
+
+
+def test_screen_inventory(run, capsys):
+    """画面一覧を先に確定し、PAGEの構成要素をそれと一致させる（共通基準 BOUND-15）。"""
+    from test_pipeline import screens
+
+    rd, _ = run
+    assert _stage(capsys, "screens")[0] == 0
+    assert not _stage(capsys, "common_design")[1]
+    s = screens()
+    s["screens"].append({**s["screens"][0], "screen_id": "PG-Cart", "operated_by": ["C-009"], "checked_by": []})
+    s["screens"][0]["checked_by"] = ["C-001"]
+    s["screens"][1]["basis"] = "observed"
+    s["not_counted"] = [{"name": "ブランド別一覧", "reason": "同じURLのフィルター", "merged_into": "PG-Brand"}]
+    write_json(rd / "ai/screens.json", s)
+    _, errors, _ = _stage(capsys, "screens")
+    assert {"UNKNOWN_CASE", "SCREEN_ROLE_OVERLAP", "OBSERVED_WITHOUT_SURVEY", "UNKNOWN_SCREEN"} <= errors
+    s = screens()
+    s["screens"][1]["operated_by"] = []
+    write_json(rd / "ai/screens.json", s)
+    assert "CASE_NO_SCREEN" in _stage(capsys, "screens")[2]
+    s = screens()
+    s["screens"].append({**s["screens"][0], "screen_id": "PG-Cart"})
+    write_json(rd / "ai/screens.json", s)
+    assert "SCREEN_NOT_IN_PAGE" in _stage(capsys, "common_design")[1]  # PAGEに PG-Cart が無い
+    write_json(rd / "ai/screens.json", screens())
+    d = design()
+    d["components"][1]["elements"] = ["PG-List", "PG-Detail", "PG-Extra"]
+    write_json(rd / "ai/common_design.json", d)
+    assert "PAGE_NOT_IN_SCREENS" in _stage(capsys, "common_design")[1]
+    (rd / "ai/screens.json").unlink()
+    assert "SCREENS_MISSING" in _stage(capsys, "common_design")[1]
 
 
 def test_component_rules(run, capsys):

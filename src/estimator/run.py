@@ -22,9 +22,10 @@ from .schemas import schema_errors
 ROOT = Path(__file__).resolve().parents[2]
 
 # 工程の順序と、各工程が読む上流ファイル（相対パス）
-STAGES = ["init", "extract", "normalize", "common_design", "assessments", "calculate", "validate", "export"]
+STAGES = ["init", "extract", "normalize", "screens", "common_design", "assessments", "calculate", "validate", "export"]
 AI_FILES = {
     "normalize": "ai/normalized_cases.json",
+    "screens": "ai/screens.json",
     "common_design": "ai/common_design.json",
     "assessments": "ai/assessments.json",
     "questions": "ai/questions.json",
@@ -32,8 +33,9 @@ AI_FILES = {
 STAGE_INPUTS = {
     "extract": ["manifest.json"],
     "normalize": ["source_inventory.json", "raw_workbook.json"],
-    "common_design": ["ai/normalized_cases.json"],
-    "assessments": ["ai/normalized_cases.json", "ai/common_design.json", "standards.json"],
+    "screens": ["ai/normalized_cases.json"],
+    "common_design": ["ai/normalized_cases.json", "ai/screens.json"],
+    "assessments": ["ai/normalized_cases.json", "ai/screens.json", "ai/common_design.json", "standards.json"],
     "calculate": ["standards.json", "ai/normalized_cases.json", "ai/common_design.json", "ai/assessments.json"],
     "validate": ["estimate.json", "ai/questions.json"],
     "export": ["estimate.json", "validation.json"],
@@ -42,6 +44,7 @@ STAGE_OUTPUTS = {
     "init": ["manifest.json", "standards.json"],
     "extract": ["raw_workbook.json", "source_inventory.json"],
     "normalize": ["ai/normalized_cases.json"],
+    "screens": ["ai/screens.json"],
     "common_design": ["ai/common_design.json"],
     "assessments": ["ai/assessments.json"],
     "calculate": ["estimate.json"],

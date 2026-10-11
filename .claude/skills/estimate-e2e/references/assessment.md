@@ -82,7 +82,7 @@
 - 採点前に、各項目の**留意点列・データ定義の「画面で確認して選ぶ」「別の〜」などの未特定語**を拾い、
   期待結果側に確認手段があるか確かめる。無ければ AX-04 を2点にして仮定を起票するか、質問にする。
   （例: 「追加の同名アカウントが作成されないこと」を期待結果で確認できない／2つ目の商品・ブランドの特定方法が無い）
-- 根拠に書く画面数は `common_design.json` の PAGE の責務（画面の数え方）と揃える。
+- 根拠に書く画面数・画面名は画面一覧（`ai/screens.json`）と揃える。
 
 ## 共通フローを呼ぶケースの AX-01（操作手順）
 - 計上ルール COST-12: AX-01 はケース固有の画面・分岐だけで数える。
@@ -91,6 +91,8 @@
 - 同じ線引きを前提準備型のケース（例: カート準備済みで削除を確認するケース）と揃える。揃わない場合は理由を evidence に書く。
 - 画面の数え方は計上ルール COST-13: ケースが**自分で操作する**画面だけを数え、判定だけを行う遷移先と、FLOW・AUTH・DATA に委ねた操作は数えない。
   操作する画面が2つ以上、または条件分岐・ダイアログ・ファイル操作があれば2点、1画面の直線的な経路は1点（例: ログイン画面で入力→ホームで表示確認は1点）。
-- AX-01 には `operation_screens`（操作した画面。PAGE の `elements` と同じID）と、該当すれば `factors`（`branch` / `dialog` / `file`）を書く。
-  検証器が期待点と照合する（`AX01_NO_SCREENS` / `AX01_SCREEN_RULE` / `SCREEN_NOT_IN_PAGE` 警告）。
+- AX-01 には `operation_screens`（操作した画面。画面一覧 `ai/screens.json` の `screen_id`）と、該当すれば `factors`（`branch` / `dialog` / `file`）を書く。
+  検証器が期待点と照合する（`AX01_NO_SCREENS` / `AX01_SCREEN_RULE` 警告、一覧外は `SCREEN_NOT_IN_INVENTORY` エラー）。
+  画面一覧でそのケースの `operated_by` にある画面から、FLOW・AUTH・DATA に委ねた画面と判定だけの画面を除いて選ぶ
+  （`operated_by` に無い画面は `SCREEN_NOT_OPERATED` 警告）。
 - FLOW を使うケースで AX-01 を2点以上にするときは、軸に `overlap_note` でFLOWの操作列以外に残るケース固有の画面・分岐を書く（`AXIS_COMPONENT_OVERLAP` 警告）。
