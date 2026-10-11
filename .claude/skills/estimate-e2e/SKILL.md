@@ -21,7 +21,8 @@ argument-hint: "<inputs/項目書.xlsx> --config <config/estimate.yaml>  |  --pr
 - 結合セル・空欄の値を一律に前方補完しない。意味上継承したら `inheritance` に根拠を残す。
 - 領域・項目・重複候補を無言で捨てない。読めない図・欠落仕様は `questions.json` に残す。
 - 検証器・スキーマ・基準・設定・入力を変更してエラーを消さない。見積もり中にSkill/ハーネスを修正しない。
-- 対象サイトへのアクセス・登録・注文はしない。不明点はユーザーに質問せず、成果物に残して進める。
+- 対象サイトへ自分でアクセス（WebFetch・ブラウザー操作）・登録・注文をしない。閲覧できる案件の調査は
+  `scripts/estimator survey` だけが行う（読み取りのみ）。不明点はユーザーに質問せず、成果物に残して進める。
 - 1クリック・1assert・1URLを自動的に1ケースにしない。
 
 ## 実行環境（見積もりモード）
@@ -36,6 +37,8 @@ CLIは `scripts/estimator <command>`。各コマンドはJSONを出力する。1
 1. **実行開始**: 引数が `--run <id>` なら既存runを使う。そうでなければ
    `scripts/estimator init-run --input <xlsx> --config <yaml>`（または `--project <manifest>`）→ `scripts/estimator extract --run <id>`。
    `standards_errors` / `missing_inputs` / `constraints` があれば記録し、算定できる範囲で続ける。
+   案件設定の `site.access` が `browsable` なら、続けて `scripts/estimator survey --run <id>` で対象サイトを調査する
+   （`runs/<id>/survey/pages.json`。画面一覧の根拠に使う）。`unavailable` なら調査しない。
 2. **読解**: `runs/<id>/source_inventory.json`（領域一覧）と `runs/<id>/views/*.md`（座標つき原文）を読む。
    大規模な表は全行を読む前に `scripts/estimator profile --run <id> --sheet <名> --rows <範囲> --header-row <行>`
    で列ごとの値の分布（観点・データ・ブラウザーの繰返し）を把握し、代表行と境界を `render` で確認する。

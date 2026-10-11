@@ -59,6 +59,23 @@
         "max_repair_attempts": {"type": "integer", "minimum": 0, "maximum": 10},
         "chunk_rows": {"type": "integer", "minimum": 10}
       }
+    },
+    "site": {
+      "type": "object",
+      "description": "対象サイト。閲覧できる案件だけ、scripts/estimator survey が読み取りだけの調査（open/goto）を行う",
+      "additionalProperties": false,
+      "properties": {
+        "access": {"enum": ["unavailable", "browsable"], "description": "browsable: 調査してよい / unavailable: 項目書だけから推定"},
+        "base_url": {"type": ["string", "null"], "pattern": "^https?://"},
+        "survey": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_pages": {"type": "integer", "minimum": 1, "maximum": 200},
+            "exclude_url_patterns": {"type": "array", "items": {"type": "string"}, "description": "開かないURLパスの正規表現（ログアウト・削除など、GETでも状態を変えうるもの）"}
+          }
+        }
+      }
     }
   }
 }

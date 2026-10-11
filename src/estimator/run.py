@@ -33,7 +33,7 @@ AI_FILES = {
 STAGE_INPUTS = {
     "extract": ["manifest.json"],
     "normalize": ["source_inventory.json", "raw_workbook.json"],
-    "screens": ["ai/normalized_cases.json"],
+    "screens": ["ai/normalized_cases.json", "survey/pages.json"],
     "common_design": ["ai/normalized_cases.json", "ai/screens.json"],
     "assessments": ["ai/normalized_cases.json", "ai/screens.json", "ai/common_design.json", "standards.json"],
     "calculate": ["standards.json", "ai/normalized_cases.json", "ai/common_design.json", "ai/assessments.json"],
@@ -58,6 +58,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "scope": {"excluded_type_ids": [], "notes": []},
     "uncertainty": {"allow_explicit_assumptions": True, "on_unresolved": "continue_as_pending"},
     "execution": {"site_interaction": False, "max_repair_attempts": 2, "chunk_rows": 80},
+    "site": {"access": "unavailable", "base_url": None,
+             "survey": {"max_pages": 40}},
 }
 
 

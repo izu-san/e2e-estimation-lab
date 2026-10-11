@@ -236,7 +236,10 @@ def validate_screens(rd: Path) -> list[dict]:
     ids = [s["screen_id"] for s in data["screens"]]
     for d in _dupes(ids):
         errs.append(E("DUPLICATE_ID", "screens", f"screen_id {d} が重複しています"))
-    surveyed = (rd / "survey").is_dir() and any((rd / "survey").iterdir())
+    from .survey import surveyed_pages, template_of
+
+    pages = surveyed_pages(rd)
+    surveyed = None if pages is None else set().union(*pages)
     seen_cases: set[str] = set()
     for n, sc in enumerate(data["screens"]):
         p = f"screens/{n}({sc['screen_id']})"
@@ -244,9 +247,12 @@ def validate_screens(rd: Path) -> list[dict]:
             errs += _check_ref(ref, sheets, f"{p}/refs/{k}")
         if sc["basis"] == "inferred" and not sc["refs"]:
             errs.append(E("NO_REF", p, "項目書から推定した画面には、画面が現れる原資料の位置 refs が必要です"))
-        if sc["basis"] == "observed" and not surveyed:
-            errs.append(E("OBSERVED_WITHOUT_SURVEY", p, "basis=observed ですが、対象サイトの調査結果（survey/）がありません。"
+        if sc["basis"] == "observed" and surveyed is None:
+            errs.append(E("OBSERVED_WITHOUT_SURVEY", p, "basis=observed ですが、対象サイトの調査結果（survey/pages.json）がありません。"
                                                         "項目書から推定した画面は inferred にしてください"))
+        elif sc["basis"] == "observed" and (not sc["url"] or template_of(sc["url"]) not in surveyed):
+            errs.append(E("SCREEN_URL_NOT_SURVEYED", p, f"basis=observed ですが、url {sc['url']} は調査で開いたページにありません"
+                                                        "（survey/pages.json の template と照合）。調査で確認できない画面は inferred にしてください"))
         for fld in ("operated_by", "checked_by"):
             for c in sc[fld]:
                 if c not in case_ids:
@@ -261,6 +267,11 @@ def validate_screens(rd: Path) -> list[dict]:
             errs.append(E("UNKNOWN_SCREEN", f"not_counted/{n}", f"merged_into {nc['merged_into']} が screens にありません"))
         for k, ref in enumerate(nc.get("refs", [])):
             errs += _check_ref(ref, sheets, f"not_counted/{n}/refs/{k}")
+    if pages:
+        listed = {template_of(x["url"]) for x in data["screens"] + data["not_counted"] if x.get("url")}
+        for t in sorted(min(pg) for pg in pages if not pg & listed):
+            errs.append(E("SURVEY_PAGE_UNREVIEWED", "screens", f"調査で開いたページ {t} が screens にも not_counted にもありません。"
+                                                               "画面として数えるか、数えない理由を url つきで not_counted に書いてください", "warning"))
     for c in sorted(case_ids - seen_cases):
         errs.append(E("CASE_NO_SCREEN", "screens", f"ケース {c} がどの画面の operated_by・checked_by にもありません。"
                                                    "ケースが操作・確認する画面を一覧に入れてください", "warning"))

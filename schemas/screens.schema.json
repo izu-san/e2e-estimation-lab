@@ -37,7 +37,8 @@
           "name": {"type": "string", "minLength": 1},
           "reason": {"type": "string", "minLength": 1},
           "merged_into": {"type": ["string", "null"], "description": "同じ画面として扱った screen_id。数えないだけならnull"},
-          "refs": {"type": "array", "items": {"$ref": "defs.schema.json#/$defs/ref"}}
+          "refs": {"type": "array", "items": {"$ref": "defs.schema.json#/$defs/ref"}},
+          "url": {"type": ["string", "null"], "description": "調査したページを数えない場合はそのURL（調査結果の確認漏れの照合に使う）"}
         }
       }
     }

@@ -105,6 +105,25 @@ def cmd_extract(a) -> int:
     return 0
 
 
+def cmd_survey(a) -> int:
+    from .survey import SurveyError, run_survey
+
+    rd = run_dir(a.run)
+    site = read_json(rd / "manifest.json")["config_resolved"].get("site") or {}
+    try:
+        doc = run_survey(rd, site)
+    except SurveyError as e:
+        log_command(rd, "survey", "failed", {"message": str(e)})
+        _out({"status": "failed", "message": str(e)})
+        return 2
+    res = {"status": "done", "pages": len(doc["pages"]), "skipped": len(doc["skipped"]), "errors": doc["errors"],
+           "file": str(rd / "survey" / "pages.json"),
+           "templates": [f"{p['template']}  {p['title']}" for p in doc["pages"]]}
+    log_command(rd, "survey", "ok", {k: res[k] for k in ("pages", "skipped")})
+    _out(res)
+    return 0
+
+
 def cmd_render(a) -> int:
     rd = run_dir(a.run)
     raw = read_json(rd / "raw_workbook.json")
@@ -393,6 +412,10 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("extract", help="Excelの構造抽出（セル・結合・非表示・図形・領域候補）")
     s.add_argument("--run", required=True)
     s.set_defaults(fn=cmd_extract)
+
+    s = sub.add_parser("survey", help="対象サイトの読み取りだけの調査（site.access=browsable のときだけ。open/goto のみ）")
+    s.add_argument("--run", required=True)
+    s.set_defaults(fn=cmd_survey)
 
     s = sub.add_parser("render", help="抽出済みシートを座標つきテキストで表示（AIの読解用）")
     s.add_argument("--run", required=True)

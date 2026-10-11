@@ -63,6 +63,8 @@
 | SCREEN_NOT_OPERATED（警告） | 画面一覧でそのケースの `operated_by` に無い画面を操作画面にしている。確認だけの画面は数えない。一覧の誤りなら一覧を直す |
 | CASE_NO_SCREEN（警告） | どの画面の `operated_by`・`checked_by` にも無いケースがある。ケースが操作・確認する画面を一覧に入れる |
 | OBSERVED_WITHOUT_SURVEY | 対象サイトの調査結果（`survey/`）が無いのに `basis: observed`。項目書から推定した画面は `inferred` |
+| SCREEN_URL_NOT_SURVEYED | `basis: observed` の `url` が調査で開いたページに無い。調査で確認できない画面は `inferred` |
+| SURVEY_PAGE_UNREVIEWED（警告） | 調査で開いたページが `screens` にも `not_counted` にも無い。数えるか、`url` つきで数えない理由を書く |
 | SCREEN_ROLE_OVERLAP | 同じケースが `operated_by` と `checked_by` の両方にある。操作するなら `operated_by` だけ |
 | REQUIRED_COMPONENT_MISSING（警告） | 構成案に BASE・RUN を立てる。要件が不明なら仮定を置き質問に残す（BOUND-18） |
 | COMPONENT_SINGLE_USE（警告） | FLOW・COMP は2件以上が使うものだけ（BOUND-16・17）。1ケースだけならケースや PAGE に含める |

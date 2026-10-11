@@ -33,6 +33,8 @@ uv sync                       # Python 3.11+、依存は pyproject.toml / uv.loc
 uv run pytest -q              # テスト
 cp config/estimate.example.yaml config/estimate.yaml
 # standards/ に基準Excel 2冊、inputs/ に項目書を配置
+# 対象サイトを調査する案件だけ（Node.js 18+）: 読み取りだけの調査に使う playwright-cli と Chromium
+npm install --prefix tools/site-survey && tools/site-survey/node_modules/.bin/playwright install chromium
 scripts/estimator inspect-standards --config config/estimate.yaml   # 基準の読取り確認（standards/README.md 参照）
 ```
 
@@ -79,6 +81,7 @@ scripts/estimator calculate --run ID               # → estimate.json
 scripts/estimator validate --run ID                # → validation.json（再計算照合を含む）
 scripts/estimator export --run ID                  # → estimate.xlsx, summary.md
 scripts/estimator mark-review --run ID --by ai --context independent|self | --by human [--reviewer 名前]
+scripts/estimator survey --run ID                  # 対象サイトの読み取りだけの調査（site.access: browsable のときだけ）
 scripts/estimator status --run ID                  # 工程状態・上流変更による無効化
 scripts/estimator inspect-standards --config C.yaml [--show-text]
 scripts/estimator evaluate --suite evals/suites/automationexercise.yaml
