@@ -16,7 +16,7 @@
         "additionalProperties": false,
         "properties": {
           "target": {"type": "string", "minLength": 1,
-                     "description": "case_id / component_id / item_id / region_id / question_id / arch_id のいずれか。全体に関わる指摘は overall"},
+                     "description": "case_id / component_id / item_id / region_id / question_id / arch_id / screen_id のいずれか。全体に関わる指摘は overall"},
           "related": {"$ref": "defs.schema.json#/$defs/text_list", "description": "関連するID（実在するもの）"},
           "kind": {"enum": ["over_split", "under_split", "missing_item", "duplicate", "double_count",
                             "scoring", "status", "question_missing", "other"]},

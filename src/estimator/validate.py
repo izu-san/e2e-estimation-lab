@@ -973,6 +973,7 @@ def review_target_ids(rd: Path) -> set[str]:
         ("ai/normalized_cases.json", None, (("regions", "region_id"), ("source_items", "item_id"), ("cases", "case_id"))),
         ("ai/common_design.json", None, (("architectures", "arch_id"), ("components", "component_id"))),
         ("ai/questions.json", None, (("items", "question_id"),)),
+        ("ai/screens.json", None, (("screens", "screen_id"),)),
     ):
         p = rd / rel
         if not p.exists():

@@ -223,6 +223,7 @@ def test_semantic_review_validation(run, capsys):
     ok = {"target": "C-001", "related": ["C-002"], "kind": "scoring", "message": "根拠が弱い", "suggestion": "再確認"}
     assert review([ok])[0] == 0
     assert review([{**ok, "target": "overall", "related": []}])[0] == 0
+    assert review([{**ok, "target": "PG-List", "related": ["PG-Detail"]}])[0] == 0  # 画面一覧の指摘は screen_id で指せる
     code, out = review([{**ok, "target": "C-999"}])
     assert code == 1 and out["errors"][0]["code"] == "UNKNOWN_TARGET"
     code, out = review([{**ok, "related": ["PAGE-xxx"]}])

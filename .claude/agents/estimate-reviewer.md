@@ -31,6 +31,6 @@ tools: Read, Grep, Glob
   {"target": "C-007", "related": ["C-008"], "kind": "over_split", "message": "…", "suggestion": "…"}
 ]}
 ```
-- `target` は実在する case_id / component_id / item_id / region_id / question_id / arch_id のいずれか。全体に関わる指摘は `overall`。複数に関わるときは `related`（実在IDの配列）に並べる。存在しないIDは検証で拒否される。
+- `target` は実在する case_id / component_id / item_id / region_id / question_id / arch_id / screen_id のいずれか。全体に関わる指摘は `overall`。複数に関わるときは `related`（実在IDの配列）に並べる。存在しないIDは検証で拒否される。
 - `resolution`（指摘への対応）は書かない。見積もり作成側が書く。
 - `message`・`suggestion` は必須（空不可）。`kind` は over_split / under_split / missing_item / duplicate / double_count / scoring / status / question_missing / other から選ぶ。
