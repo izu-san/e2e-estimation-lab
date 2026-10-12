@@ -501,3 +501,22 @@ def test_ambiguity_axis_assumption_warns(run, capsys):
     write_json(rd / "ai/assessments.json", a)
     _, _, warns = _stage(capsys, "assessments")
     assert "AXIS_ASSUMPTION_SCORE" in warns
+
+
+def test_summary_is_plain_for_beginners():
+    """summary.md は結論と人の作業を先頭に置き、内部用語は末尾の技術的な詳細に寄せる。"""
+    from estimator.export import render_summary
+    est = {"note": "x", "architectures": [{"arch_id": "A1", "name": "POMなし", "estimate_completeness": "一部未算定",
+           "subtotals": {k: {"low": 1, "std": 2, "high": 3} for k in ("cases", "common", "computed_total")},
+           "counts": {"cases": {"computed": 2, "pending": 1, "conditional": 1}, "components": {"computed": 1},
+                      "unresolved_items": 1}}]}
+    val = {"status": {"execution_status": "処理成功", "machine_validation": "passed", "semantic_review_status": "未実施"},
+           "machine": {"error_count": 0, "warning_count": 0, "stages": {}}}
+    man = {"run_id": "r", "inputs": [{"file_name": "a.xlsx"}], "standards": {"cases": {"version": "1"}, "common": {"version": "1"}}}
+    qs = [{"status": "open", "kind": "question", "question_id": "Q-1", "text": "?"}]
+    md = render_summary(man, est, val, qs, [])
+    assert md.index("## 結論") < md.index("## 人がやること") < md.index("## 技術的な詳細")
+    assert "標準 2人時（下限 1〜上限 3）" in md and "要確認（回答待ち） 1件" in md
+    assert "算定済みのうち条件付き 1件" in md and "確認事項 1件" in md
+    assert "computed=" not in md and "computed_total" not in md
+    assert md.index("execution_status") > md.index("## 技術的な詳細")

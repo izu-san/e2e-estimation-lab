@@ -454,7 +454,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--run", required=True)
     s.set_defaults(fn=cmd_validate)
 
-    s = sub.add_parser("export", help="estimate.xlsx と summary.md を出力")
+    s = sub.add_parser("export", help="estimate.xlsx・summary.md・annotated/*_見積付き.xlsx を出力")
     s.add_argument("--run", required=True)
     s.set_defaults(fn=cmd_export)
 

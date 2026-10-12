@@ -89,20 +89,21 @@ def export(rd: Path) -> dict:
     ws = wb.active
     ws.title = "サマリー"
     rows: list[list[Any]] = [
-        ["run_id", man["run_id"]],
+        ["見積もりID", man["run_id"]],
         ["入力", ", ".join(i["file_name"] for i in man["inputs"])],
-        ["execution_status", status["execution_status"]],
-        ["機械検証", status["machine_validation"]],
-        ["semantic_review_status", status["semantic_review_status"]],
-        ["注意", est["note"]],
+        ["処理の状態", f"{status['execution_status']}（{EXECUTION_HELP.get(status['execution_status'], '')}）"],
+        ["機械検証", f"{status['machine_validation']}（{MACHINE_HELP.get(status['machine_validation'], '')}）"],
+        ["意味レビュー", f"{status['semantic_review_status']}（{_review_help(status['semantic_review_status'])}）"],
+        ["工数の見方", WORKLOAD_HELP],
+        ["注意", NOTE_PLAIN],
         [],
-        ["構成案", "名称", "estimate_completeness", "区分", "下限", "標準", "上限",
-         "算定済", "要確認", "Impossible", "未算定(基準外)", "未採点", "別見積", "対象外", "他へ計上", "既存流用0", "条件付き"],
+        ["構成案", "名称", "算定の状況", "区分", "下限(人時)", "標準(人時)", "上限(人時)",
+         "算定済", "要確認", "実現不可", "未算定(基準外)", "未採点", "別見積", "対象外", "他へ計上", "既存流用で0", "条件付き"],
     ]
     for a in est["architectures"]:
         for label, key, cnt in (("個別ケース", "cases", a["counts"]["cases"]),
                                 ("共通作業", "common", a["counts"]["components"]),
-                                ("算定済み総計", "computed_total", None)):
+                                ("算定済み分の合計", "computed_total", None)):
             s = a["subtotals"][key]
             line = [a["arch_id"], a["name"], a["estimate_completeness"], label, s["low"], s["std"], s["high"]]
             if cnt is not None:
@@ -476,36 +477,101 @@ def _mapping_lines(norm: dict | None) -> list[str]:
     return out
 
 
+EXECUTION_HELP = {"処理成功": "ツールが最後まで動いた。内容が正しいという意味ではない",
+                  "処理失敗": "途中で止まった。validation.json と estimate.xlsx の「検証結果」を確認する"}
+MACHINE_HELP = {"passed": "ツールによる自動チェックでエラーなし", "failed": "自動チェックでエラーあり。結果を使う前に原因を確認する"}
+WORKLOAD_HELP = ("工数の単位は人時。下限・標準・上限は基準Excelの値を合計したもので、標準を基本の数字とし、"
+                 "下限〜上限は幅の目安として見る")
+NOTE_PLAIN = "「算定済み分の合計」は工数を出せた分だけの合計。一部未算定の場合は、案件全体の確定総額ではない"
+COMPLETENESS_HELP = {"全対象算定": "すべて算定済み", "一部未算定": "一部未算定（工数を出せていない項目がある）"}
+CATEGORY_LABELS = {"computed": "算定済み", "pending": "要確認（回答待ち）", "impossible": "実現不可", "uncomputed": "未算定（基準外）",
+                   "unassessed": "未採点", "separate_estimate": "別見積", "out_of_scope": "対象外", "counted_elsewhere": "他へ計上",
+                   "reuse_zero": "既存流用で0"}
+
+
+def _review_help(status: str) -> str:
+    if status.startswith("人確認済"):
+        return "人がレビューを記録した"
+    if status.startswith("AIレビュー済"):
+        return "別のAIが見直した。人の確認はまだ"
+    return "見直しはまだ行っていない"
+
+
+def _count_text(counts: dict) -> str:
+    main = "、".join(f"{CATEGORY_LABELS.get(k, k)} {v}件" for k, v in counts.items() if v and k != "conditional")
+    return main + (f"（算定済みのうち条件付き {counts['conditional']}件。仮定が成り立つ場合の数字）" if counts.get("conditional") else "")
+
+
+def _todo_lines(st: dict, val: dict, open_q: list[dict], conds: list[dict], findings: list[dict], unresolved: int) -> list[str]:
+    todo: list[str] = []
+    if st["execution_status"] != "処理成功" or st["machine_validation"] != "passed":
+        todo.append("自動チェックのエラーを確認する（validation.json、estimate.xlsx の「検証結果」シート）。原因が分かるまで数字を使わない")
+    if open_q:
+        todo.append(f"確認事項 {len(open_q)}件を、顧客または担当者に確認する（この文書の「確認事項・仮定」）")
+    if conds:
+        todo.append(f"条件付きの {len(conds)}件について、置いた仮定が現実的かを確認する（「条件付きの仮定・条件」）")
+    open_f = [f for f in findings if (f.get("resolution") or {}).get("status") in (None, "deferred")]
+    if open_f:
+        todo.append(f"意味レビューの未対応の指摘 {len(open_f)}件を確認する（「意味レビューの指摘」）")
+    if unresolved:
+        todo.append(f"工数を出せていない項目が {unresolved}件ある。人が見積もるか、条件を詰める")
+    if not st["semantic_review_status"].startswith("人確認済"):
+        todo.append("estimate.xlsx の「レビュー」シートに OK/NG を記入し、承認の記録（mark-review --by human）を行う。"
+                    "手順は docs/review_guide.md")
+    return [f"{n}. {x}" for n, x in enumerate(todo, start=1)]
+
+
 def render_summary(man: dict, est: dict, val: dict, questions: list[dict], conds: list[dict],
                    norm: dict | None = None, findings: list[dict] | None = None, screens: dict | None = None) -> str:
     st = val["status"]
+    findings = findings or []
+    open_q = [q for q in questions if q["status"] != "resolved"]
+    unresolved = max((a["counts"]["unresolved_items"] for a in est["architectures"]), default=0)
     out = [f"# 見積もり結果 {man['run_id']}", "",
-           f"- 入力: {', '.join(i['file_name'] for i in man['inputs'])}",
-           f"- execution_status: {st['execution_status']} / 機械検証: {st['machine_validation']} "
-           f"(エラー{val['machine']['error_count']}件, 警告{val['machine']['warning_count']}件)",
-           f"- semantic_review_status: {st['semantic_review_status']}",
-           *_mapping_lines(norm),
-           *_screen_lines(screens or {"screens": [], "not_counted": []}),
-           *_warning_lines(val),
-           f"- 基準: 個別 {man['standards']['cases'].get('version')} / 共通 {man['standards']['common'].get('version')}",
-           "", f"> {est['note']}", ""]
+           f"- 入力: {', '.join(i['file_name'] for i in man['inputs'])}", "",
+           "> この結果はAIが作った下書きです。人が確認するまで確定ではありません。", "",
+           "## 結論", ""]
     for a in est["architectures"]:
-        out += [f"## 構成案 {a['arch_id']}: {a['name']} — {a['estimate_completeness']}", "",
-                "| 区分 | 下限 | 標準 | 上限 |", "|---|---:|---:|---:|"]
-        for label, key in (("個別ケース", "cases"), ("共通作業", "common"), ("算定済み総計", "computed_total")):
+        s = a["subtotals"]["computed_total"]
+        name = f"構成案 {a['arch_id']}（{a['name']}）"
+        out.append(f"- {name}: 標準 {_fmt(s['std'])}人時（下限 {_fmt(s['low'])}〜上限 {_fmt(s['high'])}）"
+                   f" — {COMPLETENESS_HELP.get(a['estimate_completeness'], a['estimate_completeness'])}")
+    out += [f"- {WORKLOAD_HELP}。", f"- {NOTE_PLAIN}。", "",
+            "## 人がやること（優先順）", "", *(_todo_lines(st, val, open_q, conds, findings, unresolved) or ["- 特にありません"]), ""]
+    out += ["## 構成案ごとの内訳", ""]
+    for a in est["architectures"]:
+        out += [f"### 構成案 {a['arch_id']}: {a['name']}", "",
+                "| 区分 | 下限(人時) | 標準(人時) | 上限(人時) |", "|---|---:|---:|---:|"]
+        for label, key in (("個別ケース（テスト項目ごとの自動化）", "cases"), ("共通作業（ログイン処理・ページオブジェクトなど）", "common"),
+                           ("算定済み分の合計", "computed_total")):
             s = a["subtotals"][key]
             out.append(f"| {label} | {_fmt(s['low'])} | {_fmt(s['std'])} | {_fmt(s['high'])} |")
-        cc, mc = a["counts"]["cases"], a["counts"]["components"]
-        fmt = lambda d: ", ".join(f"{k}={v}" for k, v in d.items())  # noqa: E731
-        out += ["", f"- 個別ケース件数: {fmt(cc)}", f"- 共通作業件数: {fmt(mc)}", f"- 未解決件数: {a['counts']['unresolved_items']}", ""]
-    out += [f"## 条件付きの仮定・条件 ({len(conds)}件)", ""]
+        out += ["", f"- 個別ケース: {_count_text(a['counts']['cases']) or '0件'}",
+                f"- 共通作業: {_count_text(a['counts']['components']) or '0件'}",
+                f"- 工数を出せていない項目: {a['counts']['unresolved_items']}件", ""]
+    out += [f"## 条件付きの仮定・条件 ({len(conds)}件)", "",
+            "「この仮定が成り立つなら」という前提の数字です。成り立たない場合は見積もり直しが必要です。", ""]
     for c in conds:
         detail = "; ".join(c["conditions"] + c["assumptions"]) or "（条件の記載なし）"
         out.append(f"- [{c['kind']}] {c['id']}: {detail}")
     out.append("")
-    out += _review_lines(findings or [])
-    open_q = [q for q in questions if q["status"] != "resolved"]
-    out += [f"## 確認事項・仮定 ({len(open_q)}件未解決)", ""]
+    out += _review_lines(findings)
+    out += [f"## 確認事項・仮定 ({len(open_q)}件未解決)", "",
+            "AIが判断できず、質問や仮定として残したものです。仮の数字は作っていません。", ""]
     for q in open_q[:50]:
         out.append(f"- [{q['kind']}] {q['question_id']}: {q['text']}")
+    out += ["", "## 状態の見方", "",
+            f"- 処理の状態「{st['execution_status']}」: {EXECUTION_HELP.get(st['execution_status'], '')}",
+            f"- 機械検証「{st['machine_validation']}」: {MACHINE_HELP.get(st['machine_validation'], '')}"
+            f"（エラー{val['machine']['error_count']}件、警告{val['machine']['warning_count']}件）",
+            f"- 意味レビュー「{st['semantic_review_status']}」: {_review_help(st['semantic_review_status'])}",
+            "", "## 技術的な詳細（読み飛ばしてよい）", "",
+            f"- execution_status: {st['execution_status']} / 機械検証: {st['machine_validation']} "
+            f"(エラー{val['machine']['error_count']}件, 警告{val['machine']['warning_count']}件)",
+            f"- semantic_review_status: {st['semantic_review_status']}",
+            *_mapping_lines(norm),
+            *_screen_lines(screens or {"screens": [], "not_counted": []}),
+            *_warning_lines(val),
+            f"- 基準: 個別 {man['standards']['cases'].get('version')} / 共通 {man['standards']['common'].get('version')}",
+            f"- 詳細な数字は estimate.xlsx、項目ごとの結果は annotated/ の見積付き項目書にあります"]
     return "\n".join(out) + "\n"
